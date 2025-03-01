@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/gofiber/websocket/v2"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"

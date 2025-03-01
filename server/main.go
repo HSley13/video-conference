@@ -16,7 +16,6 @@ import (
 	"video-conference/internal/transport/middleware"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/websocket/v2"
 )
 
 func main() {
@@ -26,7 +25,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
 
 	if err := database.Migrate(db); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
@@ -59,7 +57,7 @@ func main() {
 	app.Post("/api/rooms/:id/join", http.JoinRoomHandler(roomSvc))
 
 	app.Use("/ws/:roomID", middleware.WSUpgrade)
-	app.Get("/ws/:roomID", websocket.New(http.WebSocketHandler(wsSvc)))
+	app.Get("/ws/:roomID", http.WebSocketHandler(wsSvc))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

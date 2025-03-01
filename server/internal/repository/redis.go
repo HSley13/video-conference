@@ -4,7 +4,11 @@ import (
 	"context"
 	"time"
 
+	"encoding/json"
+	"fmt"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
+	"video-conference/internal/config"
 )
 
 type WSRepository struct {
@@ -38,9 +42,13 @@ func (r *WSRepository) PublishMessage(ctx context.Context, channel string, messa
 	return r.client.Publish(ctx, channel, payload).Err()
 }
 
-func (r *WSRepository) SubscribeChannel(ctx context.Context, channel string) <-chan *redis.Message {
-	pubsub := r.client.Subscribe(ctx, channel)
+func (r *WSRepository) Subscribe(ctx context.Context, channel uuid.UUID) <-chan *redis.Message {
+	pubsub := r.client.Subscribe(ctx, channel.String())
 	return pubsub.Channel()
+}
+
+func (r *WSRepository) Unsubscribe(ctx context.Context, channel uuid.UUID) {
+	r.client.Unlink(ctx, channel.String())
 }
 
 func (r *WSRepository) Close() error {

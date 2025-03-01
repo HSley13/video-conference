@@ -5,17 +5,19 @@ import (
 	"errors"
 	"time"
 
-	"conferencing-app/internal/database"
-	"conferencing-app/internal/repository"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"video-conference/internal/config"
+	"video-conference/internal/database"
+	"video-conference/internal/repository"
 )
 
 type AuthService struct {
-	userRepo repository.UserRepository
+	userRepo *repository.UserRepository
 }
 
-func NewAuthService(userRepo repository.UserRepository) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository) *AuthService {
 	return &AuthService{userRepo: userRepo}
 }
 
@@ -31,10 +33,10 @@ func (s *AuthService) Register(ctx context.Context, username, email, password st
 	}
 
 	user := &database.User{
-		Username: username,
-		Email:    email,
-		Password: string(hashedPassword),
-		IsActive: true,
+		Username:     username,
+		Email:        email,
+		HashPassword: string(hashedPassword),
+		IsActive:     true,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -50,7 +52,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (map[st
 		return nil, errors.New("invalid credentials")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.HashPassword), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
 	}
 
@@ -70,7 +72,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (map[st
 	}, nil
 }
 
-func (s *AuthService) generateJWT(userID uint, tokenType string, duration time.Duration) (string, error) {
+func (s *AuthService) generateJWT(userID uuid.UUID, tokenType string, duration time.Duration) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID,
 		"type":    tokenType,
@@ -78,5 +80,5 @@ func (s *AuthService) generateJWT(userID uint, tokenType string, duration time.D
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(config.JWTSecret))
+	return token.SignedString([]byte(config.Load().JWTSecret))
 }

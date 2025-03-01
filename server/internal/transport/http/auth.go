@@ -3,11 +3,11 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"conferencing-app/internal/service"
-	"conferencing-app/internal/utils"
+	"video-conference/internal/service"
+	"video-conference/internal/utils"
 )
 
-func RegisterHandler(svc service.AuthService) fiber.Handler {
+func RegisterHandler(svc *service.AuthService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		type RegisterRequest struct {
 			Username string `json:"username" validate:"required,min=3"`
@@ -33,7 +33,7 @@ func RegisterHandler(svc service.AuthService) fiber.Handler {
 	}
 }
 
-func LoginHandler(svc service.AuthService) fiber.Handler {
+func LoginHandler(svc *service.AuthService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		type LoginRequest struct {
 			Email    string `json:"email" validate:"required,email"`

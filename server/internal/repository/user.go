@@ -1,8 +1,9 @@
 package repository
 
 import (
-	"conferencing-app/internal/database"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"video-conference/internal/database"
 )
 
 type UserRepository struct {
@@ -26,7 +27,7 @@ func (r *UserRepository) GetByEmail(email string) (*database.User, error) {
 	return &user, nil
 }
 
-func (r *UserRepository) GetByID(id uint) (*database.User, error) {
+func (r *UserRepository) GetByID(id uuid.UUID) (*database.User, error) {
 	var user database.User
 	err := r.db.First(&user, id).Error
 	if err != nil {

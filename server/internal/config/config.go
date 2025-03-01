@@ -6,11 +6,7 @@ import (
 )
 
 type Config struct {
-	DBHost        string
-	DBPort        string
-	DBUser        string
-	DBPassword    string
-	DBName        string
+	Dsn           string
 	RedisURL      string
 	JWTSecret     string
 	Port          string
@@ -20,11 +16,7 @@ type Config struct {
 
 func Load() *Config {
 	return &Config{
-		DBHost:        getEnv("DB_HOST", "localhost"),
-		DBPort:        getEnv("DB_PORT", "5432"),
-		DBUser:        getEnv("DB_USER", "postgres"),
-		DBPassword:    getEnv("DB_PASSWORD", "postgres"),
-		DBName:        getEnv("DB_NAME", "conferencing"),
+		Dsn:           getEnv("DSN", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"),
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:     getEnv("JWT_SECRET", "supersecretkey"),
 		Port:          getEnv("PORT", "3000"),

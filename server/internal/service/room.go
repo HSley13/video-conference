@@ -5,19 +5,24 @@ import (
 	"errors"
 	"time"
 
-	"conferencing-app/internal/database"
-	"conferencing-app/internal/repository"
+	"github.com/google/uuid"
+	"video-conference/internal/database"
+	"video-conference/internal/repository"
 )
 
 type RoomService struct {
-	roomRepo repository.RoomRepository
+	roomRepo *repository.RoomRepository
 }
 
-func NewRoomService(roomRepo repository.RoomRepository) *RoomService {
+func NewRoomService(roomRepo *repository.RoomRepository) *RoomService {
 	return &RoomService{roomRepo: roomRepo}
 }
 
-func (s *RoomService) CreateRoom(ctx context.Context, userID uint, name, description string) (*database.Room, error) {
+func NewWebSocketService(redisRepo *repository.WSRepository, roomRepo *repository.RoomRepository, userRepo *repository.UserRepository) *WebSocketService {
+	return &WebSocketService{redisRepo: redisRepo, roomRepo: roomRepo, userRepo: userRepo}
+}
+
+func (s *RoomService) CreateRoom(ctx context.Context, userID uuid.UUID, name, description string) (*database.Room, error) {
 	if name == "" {
 		return nil, errors.New("room name is required")
 	}
@@ -36,7 +41,7 @@ func (s *RoomService) CreateRoom(ctx context.Context, userID uint, name, descrip
 	return room, nil
 }
 
-func (s *RoomService) JoinRoom(ctx context.Context, userID, roomID uint) (*database.Participant, error) {
+func (s *RoomService) JoinRoom(ctx context.Context, userID uuid.UUID, roomID uuid.UUID) (*database.Participant, error) {
 	room, err := s.roomRepo.GetRoom(roomID)
 	if err != nil || !room.IsActive {
 		return nil, errors.New("room not available")
@@ -59,7 +64,7 @@ func (s *RoomService) ListActiveRooms(ctx context.Context) ([]database.Room, err
 	return s.roomRepo.GetActiveRooms()
 }
 
-func (s *RoomService) EndRoom(ctx context.Context, userID, roomID uint) error {
+func (s *RoomService) EndRoom(ctx context.Context, userID uuid.UUID, roomID uuid.UUID) error {
 	room, err := s.roomRepo.GetRoom(roomID)
 	if err != nil || room.OwnerID != userID {
 		return errors.New("unauthorized operation")

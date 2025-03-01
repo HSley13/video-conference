@@ -3,13 +3,15 @@ package http
 import (
 	"github.com/gofiber/websocket/v2"
 
-	"conferencing-app/internal/service"
-	"conferencing-app/internal/utils"
+	"github.com/gofiber/fiber/v2"
+
+	"video-conference/internal/service"
+	"video-conference/internal/utils"
 )
 
-func WebSocketHandler(svc service.WebSocketService) fiber.Handler {
+func WebSocketHandler(svc *service.WebSocketService) fiber.Handler {
 	return websocket.New(func(c *websocket.Conn) {
-		userID, err := utils.GetUserIDFromContext(c)
+		userID, err := utils.GetUserIDFromContext(c.Context())
 		if err != nil {
 			c.WriteJSON(utils.ErrorResponse("Unauthorized"))
 			c.Close()

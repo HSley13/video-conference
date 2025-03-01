@@ -3,11 +3,11 @@ package http
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"conferencing-app/internal/service"
-	"conferencing-app/internal/utils"
+	"video-conference/internal/service"
+	"video-conference/internal/utils"
 )
 
-func CreateRoomHandler(svc service.RoomService) fiber.Handler {
+func CreateRoomHandler(svc *service.RoomService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := c.Locals("userID").(uint)
 
@@ -34,7 +34,7 @@ func CreateRoomHandler(svc service.RoomService) fiber.Handler {
 	}
 }
 
-func JoinRoomHandler(svc service.RoomService) fiber.Handler {
+func JoinRoomHandler(svc *service.RoomService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userID := c.Locals("userID").(uint)
 		roomID, err := c.ParamsInt("id")
