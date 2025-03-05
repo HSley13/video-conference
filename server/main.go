@@ -1,81 +1,47 @@
 package main
 
 import (
-	"context"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
-	"video-conference/internal/config"
-	"video-conference/internal/database"
-	"video-conference/internal/repository"
-	"video-conference/internal/service"
-	"video-conference/internal/transport/http"
-	"video-conference/internal/transport/middleware"
-
-	"github.com/gofiber/fiber/v2"
+	"github.com/go-redis/redis/v8"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"video-conference/config"
+	"video-conference/models"
+	"video-conference/repositories"
+	"video-conference/server"
+	"video-conference/services"
 )
 
 func main() {
 	cfg := config.Load()
 
-	db, err := database.NewPostgres(cfg)
+	db, err := gorm.Open(postgres.Open(cfg.PostgresDSN), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatal("Failed to connect to PostgreSQL:", err)
 	}
 
-	if err := database.Migrate(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Session{},
+		&models.Room{},
+		&models.Participant{},
+	); err != nil {
+		log.Fatal("Database migration failed:", err)
 	}
 
-	redisClient, err := repository.NewRedisClient(cfg)
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		log.Fatal("Failed to parse Redis URL:", err)
 	}
-	defer redisClient.Close()
+	redisClient := redis.NewClient(redisOpts)
 
-	userRepo := repository.NewUserRepository(db)
-	roomRepo := repository.NewRoomRepository(db)
-	wsRepo := repository.NewWSRepository(redisClient)
+	userRepo := repositories.NewUserRepository(db)
+	roomRepo := repositories.NewRoomRepository(redisClient, db)
 
-	authSvc := service.NewAuthService(userRepo)
-	roomSvc := service.NewRoomService(roomRepo)
-	wsSvc := service.NewWebSocketService(wsRepo, roomRepo, userRepo)
+	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
+	websocketSvc := services.NewWebSocketService(roomRepo, cfg.WebRTCIceServers, cfg.MaxConnections)
 
-	app := fiber.New(fiber.Config{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	})
-
-	app.Post("/api/auth/register", http.RegisterHandler(authSvc))
-	app.Post("/api/auth/login", http.LoginHandler(authSvc))
-
-	app.Use(middleware.JWTAuth(cfg.JWTSecret))
-	app.Post("/api/rooms", http.CreateRoomHandler(roomSvc))
-	app.Post("/api/rooms/:id/join", http.JoinRoomHandler(roomSvc))
-
-	app.Use("/ws/:roomID", middleware.WSUpgrade)
-	app.Get("/ws/:roomID", http.WebSocketHandler(wsSvc))
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		if err := app.Listen(":" + cfg.Port); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
-		}
-	}()
-
-	<-ctx.Done()
-	log.Println("Shutting down server...")
-
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := app.ShutdownWithContext(ctxTimeout); err != nil {
-		log.Printf("Server shutdown error: %v", err)
-	}
-	log.Println("Server stopped gracefully")
+	srv := server.New(cfg, authSvc, websocketSvc)
+	srv.Start()
 }
