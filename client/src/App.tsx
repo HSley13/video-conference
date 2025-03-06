@@ -1,12 +1,16 @@
 import "./index.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Home } from "./Components/Home";
-import { SidebarProvider } from "./Contexts/SidebarContext.tsx";
+import { Route, Routes, Navigate } from "react-router-dom";
+import { Container } from "react-bootstrap";
 
 export const App = () => {
   return (
-    <SidebarProvider>
-      <Home />
-    </SidebarProvider>
+    <Container>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </Container>
   );
 };

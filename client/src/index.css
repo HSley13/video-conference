@@ -1,1 +1,19 @@
 @import "tailwindcss";
+/* CSS to limit the size and wrap the message text */
+.chat-window-container {
+  max-width: 600px; /* Adjust to the desired width */
+  width: 100%;
+  height: 600px; /* Fixed height */
+  overflow: hidden;
+}
+
+.message-bubble {
+  word-wrap: break-word; /* Ensures long words break onto the next line */
+  overflow: hidden;
+  white-space: pre-wrap; /* To preserve spaces and line breaks */
+  text-overflow: ellipsis; /* Optional: Truncate overflowed text with ellipsis */
+}
+
+.message-container {
+  max-width: 100%; /* Ensure it doesn't exceed the container width */
+}
