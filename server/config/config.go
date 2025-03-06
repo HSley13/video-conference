@@ -20,7 +20,7 @@ func Load() *Config {
 	return &Config{
 		Port:           getEnv("PORT", "3002"),
 		JWTSecret:      getEnv("JWT_SECRET", "secret"),
-		AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:3000"}, ","),
+		AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:3001"}, ","),
 		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
 		PostgresDSN:    getEnv("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"),
 		MaxConnections: getEnvAsInt("MAX_CONNECTIONS", 10),

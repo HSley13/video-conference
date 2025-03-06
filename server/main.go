@@ -1,11 +1,11 @@
 package main
 
 import (
-	"log"
-
 	"github.com/go-redis/redis/v8"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"log"
 	"video-conference/config"
 	"video-conference/models"
 	"video-conference/repositories"
@@ -14,6 +14,10 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found")
+	}
+
 	cfg := config.Load()
 
 	db, err := gorm.Open(postgres.Open(cfg.PostgresDSN), &gorm.Config{})

@@ -1,14 +1,19 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 	"video-conference/models"
 	"video-conference/repositories"
 
 	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 )
 
 type AuthService struct {
@@ -20,15 +25,15 @@ func NewAuthService(userRepo *repositories.UserRepository, jwtSecret string) *Au
 	return &AuthService{userRepo: userRepo, jwtSecret: jwtSecret}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+func (s *AuthService) Register(ctx context.Context, email string, password string) (*models.User, error) {
+	hashedPassword, err := HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
 	user := &models.User{
 		Email:        email,
-		PasswordHash: string(hashedPassword),
+		HashPassword: string(hashedPassword),
 	}
 
 	if err := s.userRepo.CreateUser(ctx, user); err != nil {
@@ -38,13 +43,13 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 	return user, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
+func (s *AuthService) Login(ctx context.Context, email string, password string) (string, string, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return "", "", errors.New("invalid credentials")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := VerifyPassword(password, user.HashPassword); err != nil {
 		return "", "", errors.New("invalid credentials")
 	}
 
@@ -121,4 +126,59 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 	}
 
 	return s.generateAccessToken(userID)
+}
+
+const (
+	memory      = 64 * 1024
+	iterations  = 3
+	parallelism = 2
+	saltLength  = 16
+	keyLength   = 32
+)
+
+func GenerateRandomSalt(length int) (string, error) {
+	salt := make([]byte, length)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate random salt: %v", err)
+	}
+	return base64.RawStdEncoding.EncodeToString(salt), nil
+}
+
+func HashPassword(password string) (string, error) {
+	salt, err := GenerateRandomSalt(saltLength)
+	if err != nil {
+		return "", err
+	}
+
+	hash := argon2.IDKey([]byte(password), []byte(salt), iterations, memory, uint8(parallelism), keyLength)
+
+	saltEncoded := base64.RawStdEncoding.EncodeToString([]byte(salt))
+	hashEncoded := base64.RawStdEncoding.EncodeToString(hash)
+
+	return fmt.Sprintf("%s$%s", saltEncoded, hashEncoded), nil
+}
+
+func VerifyPassword(password string, hashedPassword string) error {
+	parts := strings.Split(hashedPassword, "$")
+	if len(parts) != 2 {
+		return errors.New("invalid hashed password format")
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return errors.New("failed to decode salt")
+	}
+
+	storedHash, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return errors.New("failed to decode stored hash")
+	}
+
+	computedHash := argon2.IDKey([]byte(password), salt, iterations, memory, uint8(parallelism), keyLength)
+
+	if !bytes.Equal(computedHash, storedHash) {
+		return errors.New("invalid password")
+	}
+
+	return nil
 }

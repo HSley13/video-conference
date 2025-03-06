@@ -20,7 +20,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) erro
 }
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
+	user := models.User{}
 	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
 	return &user, result.Error
 }
@@ -30,7 +30,7 @@ func (r *UserRepository) CreateSession(ctx context.Context, session *models.Sess
 }
 
 func (r *UserRepository) GetSession(ctx context.Context, sessionID string) (*models.Session, error) {
-	var session models.Session
+	session := models.Session{}
 	result := r.db.WithContext(ctx).First(&session, "id = ?", sessionID)
 	return &session, result.Error
 }

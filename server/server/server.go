@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 	"video-conference/config"
@@ -41,7 +40,7 @@ func New(cfg *config.Config, authSvc *services.AuthService, websocketSvc *servic
 func (s *Server) SetupMiddleware() {
 	s.app.Use(recover.New())
 	s.app.Use(cors.New(cors.Config{
-		AllowOrigins:     strings.Join(s.cfg.AllowedOrigins, ","),
+		AllowOrigins:     "http://localhost:3001",
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,

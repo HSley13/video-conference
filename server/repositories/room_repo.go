@@ -39,7 +39,7 @@ func (r *RoomRepository) SubscribeToRoom(ctx context.Context, roomID string) <-c
 }
 
 func (r *RoomRepository) GetRoom(ctx context.Context, roomID string) (*models.Room, error) {
-	var room models.Room
+	room := models.Room{}
 	result := r.db.WithContext(ctx).First(&room, "id = ?", roomID)
 	return &room, result.Error
 }
