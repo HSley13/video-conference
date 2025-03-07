@@ -27,9 +27,9 @@ export const SideBar = () => {
   };
 
   return (
-    <aside className="border-r-3 bg-gray-200 border-gray-200 h-full flex flex-col ">
+    <aside className="border-r-3 bg-gray-400 border-gray-200 h-full flex flex-col ">
       <div className="flex flex-col m-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-        <div className="border-b-2 border-gray-400 p-2 m-2 flex flex-col items-center">
+        <div className="border-b-2 border-gray-800 p-2 m-2 flex flex-col items-center">
           <Link to="/" className="flex flex-col items-center w-full">
             <Button className="bg-transparent p-0 border-0 flex flex-col items-center">
               <img

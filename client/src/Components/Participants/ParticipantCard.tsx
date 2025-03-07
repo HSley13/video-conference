@@ -1,5 +1,6 @@
 import { Participant } from "../../Types/types";
 import { Pin, PinOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { Button, Card, Row, Col } from "react-bootstrap";
 
 type ParticipantCardProps = {
   participant: Participant;
@@ -14,57 +15,75 @@ export const ParticipantCard = ({
   onAudioToggle,
 }: ParticipantCardProps) => {
   return (
-    <div
-      className={`flex items-center justify-between p-2 bg-white rounded-full mb-2 transition-colors ${
-        participant.isPinned ? "border-2 border-blue-200" : ""
-      }`}
+    <Card
+      className={`mb-2 border-2 ${participant.isPinned ? "border-primary" : "border-light"} rounded-pill`}
     >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <img
-          src={participant.photo}
-          alt={participant.name}
-          className="w-10 h-10 rounded-full object-cover"
-        />
-        <span className="font-medium truncate">{participant.name}</span>
-      </div>
+      <Card.Body className="p-2">
+        <Row className="align-items-center g-2">
+          <Col xs="auto" className="flex-grow-1">
+            <div className="d-flex align-items-center gap-2">
+              <img
+                src={participant.photo}
+                alt={participant.name}
+                className="rounded-circle"
+                width={40}
+                height={40}
+              />
+              <span className="font-medium text-truncate">
+                {participant.name}
+              </span>
+            </div>
+          </Col>
 
-      <div className="flex items-center gap-3 ml-2">
-        <button
-          onClick={() => onPin(participant.id.toString())}
-          className="text-gray-500 hover:text-blue-500 transition-colors"
-          aria-label={participant.isPinned ? "Unpin" : "Pin"}
-        >
-          {participant.isPinned ? (
-            <Pin className="w-5 h-5" />
-          ) : (
-            <PinOff className="w-5 h-5 text-red-500" />
-          )}
-        </button>
+          <Col xs="auto">
+            <div className="d-flex gap-2">
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => onPin(participant.id.toString())}
+                aria-label={participant.isPinned ? "Unpin" : "Pin"}
+                className="text-decoration-none p-0"
+              >
+                {participant.isPinned ? (
+                  <Pin className="text-primary" size={20} />
+                ) : (
+                  <PinOff className="text-danger" size={20} />
+                )}
+              </Button>
 
-        <button
-          onClick={() => onVideoToggle(participant.id.toString())}
-          className="text-gray-500 hover:text-blue-500 transition-colors"
-          aria-label={participant.videoOn ? "Turn off video" : "Turn on video"}
-        >
-          {participant.videoOn ? (
-            <Video className="w-5 h-5" />
-          ) : (
-            <VideoOff className="w-5 h-5 text-red-500" />
-          )}
-        </button>
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => onVideoToggle(participant.id.toString())}
+                aria-label={
+                  participant.videoOn ? "Turn off video" : "Turn on video"
+                }
+                className="text-decoration-none p-0"
+              >
+                {participant.videoOn ? (
+                  <Video className="text-primary" size={20} />
+                ) : (
+                  <VideoOff className="text-danger" size={20} />
+                )}
+              </Button>
 
-        <button
-          onClick={() => onAudioToggle(participant.id.toString())}
-          className="text-gray-500 hover:text-blue-500 transition-colors"
-          aria-label={participant.audioOn ? "Mute" : "Unmute"}
-        >
-          {participant.audioOn ? (
-            <Mic className="w-5 h-5" />
-          ) : (
-            <MicOff className="w-5 h-5 text-red-500" />
-          )}
-        </button>
-      </div>
-    </div>
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => onAudioToggle(participant.id.toString())}
+                aria-label={participant.audioOn ? "Mute" : "Unmute"}
+                className="text-decoration-none p-0"
+              >
+                {participant.audioOn ? (
+                  <Mic className="text-primary" size={20} />
+                ) : (
+                  <MicOff className="text-danger" size={20} />
+                )}
+              </Button>
+            </div>
+          </Col>
+        </Row>
+      </Card.Body>
+    </Card>
   );
 };
