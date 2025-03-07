@@ -1,6 +1,5 @@
 import { Participant } from "../../Types/types";
-import { FiVideo, FiVideoOff, FiMic, FiMicOff } from "react-icons/fi";
-import { Pin, PinOff } from "lucide-react";
+import { Pin, PinOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 type ParticipantCardProps = {
   participant: Participant;
@@ -48,9 +47,9 @@ export const ParticipantCard = ({
           aria-label={participant.videoOn ? "Turn off video" : "Turn on video"}
         >
           {participant.videoOn ? (
-            <FiVideo className="w-5 h-5" />
+            <Video className="w-5 h-5" />
           ) : (
-            <FiVideoOff className="w-5 h-5 text-red-500" />
+            <VideoOff className="w-5 h-5 text-red-500" />
           )}
         </button>
 
@@ -60,9 +59,9 @@ export const ParticipantCard = ({
           aria-label={participant.audioOn ? "Mute" : "Unmute"}
         >
           {participant.audioOn ? (
-            <FiMic className="w-5 h-5" />
+            <Mic className="w-5 h-5" />
           ) : (
-            <FiMicOff className="w-5 h-5 text-red-500" />
+            <MicOff className="w-5 h-5 text-red-500" />
           )}
         </button>
       </div>

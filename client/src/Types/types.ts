@@ -17,3 +17,11 @@ export type Message = {
     photo: string;
   };
 };
+
+export type User = {
+  id: number;
+  name: string;
+  imgUrl: string;
+  isAudioOn: boolean;
+  videoStream: MediaStream | null;
+};
