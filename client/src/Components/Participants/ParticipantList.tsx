@@ -47,7 +47,7 @@ export const ParticipantList = () => {
   ]);
 
   return (
-    <div className="flex flex-col h-[300px] w-95 bg-white rounded-lg overflow-hidden">
+    <div className="flex flex-col h-[300px] w-80 bg-white rounded-lg overflow-hidden">
       <h3 className="text-lg font-semibold mb-2">Participants</h3>
       <div className="flex-1 overflow-y-auto rounded-lg p-2 bg-gray-200">
         {Participants.map((participant) => (

@@ -64,9 +64,9 @@ export const ChatWindow = () => {
   };
 
   return (
-    <div className="flex flex-col h-[600px] w-95 bg-white overflow-hidden">
+    <div className="flex flex-col h-[550px] w-80 bg-white overflow-hidden">
       <h3 className="text-lg font-semibold mb-2">Chat</h3>
-      <div className="flex-1 overflow-y-auto rounded-t-lg p-4 bg-gray-200">
+      <div className="flex-1 overflow-y-auto rounded-t-lg p-2 bg-gray-200">
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
