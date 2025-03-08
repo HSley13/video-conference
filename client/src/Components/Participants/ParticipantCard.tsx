@@ -1,37 +1,35 @@
-import { Participant } from "../../Types/types";
+import { User } from "../../Types/types";
 import { Pin, PinOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { Button, Card, Row, Col } from "react-bootstrap";
 
 type ParticipantCardProps = {
-  participant: Participant;
+  user: User;
   onPin: (id: string) => void;
   onVideoToggle: (id: string) => void;
   onAudioToggle: (id: string) => void;
 };
 export const ParticipantCard = ({
-  participant,
+  user,
   onPin,
   onVideoToggle,
   onAudioToggle,
 }: ParticipantCardProps) => {
   return (
     <Card
-      className={`mb-2 border-2 ${participant.isPinned ? "border-primary" : "border-light"} rounded-pill`}
+      className={`mb-2 border-2 ${user.isPinned ? "border-primary" : "border-light"} rounded-pill`}
     >
       <Card.Body className="p-2">
         <Row className="align-items-center g-2">
           <Col xs="auto" className="flex-grow-1">
             <div className="d-flex align-items-center gap-2">
               <img
-                src={participant.photo}
-                alt={participant.name}
+                src={user.imgUrl}
+                alt={user.name}
                 className="rounded-circle"
                 width={40}
                 height={40}
               />
-              <span className="font-medium text-truncate">
-                {participant.name}
-              </span>
+              <span className="font-medium text-truncate">{user.name}</span>
             </div>
           </Col>
 
@@ -40,11 +38,11 @@ export const ParticipantCard = ({
               <Button
                 variant="link"
                 size="sm"
-                onClick={() => onPin(participant.id.toString())}
-                aria-label={participant.isPinned ? "Unpin" : "Pin"}
+                onClick={() => onPin(user.id.toString())}
+                aria-label={user.isPinned ? "Unpin" : "Pin"}
                 className="text-decoration-none p-0"
               >
-                {participant.isPinned ? (
+                {user.isPinned ? (
                   <Pin className="text-primary" size={20} />
                 ) : (
                   <PinOff className="text-danger" size={20} />
@@ -54,13 +52,11 @@ export const ParticipantCard = ({
               <Button
                 variant="link"
                 size="sm"
-                onClick={() => onVideoToggle(participant.id.toString())}
-                aria-label={
-                  participant.videoOn ? "Turn off video" : "Turn on video"
-                }
+                onClick={() => onVideoToggle(user.id.toString())}
+                aria-label={user.isVideoOn ? "Turn off video" : "Turn on video"}
                 className="text-decoration-none p-0"
               >
-                {participant.videoOn ? (
+                {user.isVideoOn ? (
                   <Video className="text-primary" size={20} />
                 ) : (
                   <VideoOff className="text-danger" size={20} />
@@ -70,11 +66,11 @@ export const ParticipantCard = ({
               <Button
                 variant="link"
                 size="sm"
-                onClick={() => onAudioToggle(participant.id.toString())}
-                aria-label={participant.audioOn ? "Mute" : "Unmute"}
+                onClick={() => onAudioToggle(user.id.toString())}
+                aria-label={user.isAudioOn ? "Mute" : "Unmute"}
                 className="text-decoration-none p-0"
               >
-                {participant.audioOn ? (
+                {user.isAudioOn ? (
                   <Mic className="text-primary" size={20} />
                 ) : (
                   <MicOff className="text-danger" size={20} />

@@ -3,6 +3,7 @@
 ![App Preview](./previews/1.png)
 ![App Preview](./previews/2.png)
 ![App Preview](./previews/3.png)
+![App Preview](./previews/4.png)
 
 A high-performance video conferencing solution with integrated ephemeral messaging, built using modern technologies for optimal performance and scalability.
 

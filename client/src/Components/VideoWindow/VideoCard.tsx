@@ -7,7 +7,6 @@ type VideoCardProps = {
   name: string;
   isAudioOn: boolean;
   isPinned: boolean;
-  imgUrl: string;
   videoStream: MediaStream | null;
   onPin: (id: number) => void;
 };
@@ -42,7 +41,7 @@ export const VideoCard = ({
   }, [videoStream]);
 
   return (
-    <Card className="h-100 position-relative overflow-hidden bg-secondary">
+    <Card className="h-100 w-100 position-relative overflow-hidden bg-secondary">
       <Card.Body className="p-0 h-100">
         {videoStream ? (
           <video

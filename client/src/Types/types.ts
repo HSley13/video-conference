@@ -1,12 +1,3 @@
-export type Participant = {
-  id: number;
-  name: string;
-  photo: string;
-  isPinned: boolean;
-  videoOn: boolean;
-  audioOn: boolean;
-};
-
 export type Message = {
   id: number;
   text: string;
@@ -23,5 +14,7 @@ export type User = {
   name: string;
   imgUrl: string;
   isAudioOn: boolean;
+  isPinned: boolean;
+  isVideoOn: boolean;
   videoStream: MediaStream | null;
 };

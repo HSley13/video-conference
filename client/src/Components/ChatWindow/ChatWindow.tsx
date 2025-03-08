@@ -6,10 +6,18 @@ import { FormatTime } from "../../Utils/utils";
 
 export const ChatWindow = () => {
   const userID = 123;
+  const [newMessage, setNewMessage] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: "Hey, how are you? I haven't seen you in a while. Have u guys been working on anything?",
+      text: "Hey, how are you?",
       time: FormatTime(new Date()),
       user: {
         id: 1,
@@ -28,14 +36,6 @@ export const ChatWindow = () => {
       },
     },
   ]);
-
-  const [newMessage, setNewMessage] = useState("");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
 
   useEffect(() => {
     scrollToBottom();
@@ -64,8 +64,8 @@ export const ChatWindow = () => {
   };
 
   return (
-    <div className="flex flex-col h-[550px] w-80 bg-white rounded-lg overflow-hidden">
-      <h3 className="text-lg font-semibold mb-2">Chat</h3>
+    <div className="flex flex-col h-[520px] w-80 bg-white rounded-lg overflow-hidden">
+      <h3 className="text-lg font-semibold m-2">Chat</h3>
       <div className="flex-1 overflow-y-auto rounded-t-lg p-2 bg-gray-200">
         {messages.map((message) => (
           <MessageBubble
