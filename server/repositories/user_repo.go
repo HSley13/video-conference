@@ -25,6 +25,12 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	return &user, result.Error
 }
 
+func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
+	user := models.User{}
+	result := r.db.WithContext(ctx).First(&user, "id = ?", userID)
+	return &user, result.Error
+}
+
 func (r *UserRepository) CreateSession(ctx context.Context, session *models.Session) error {
 	return r.db.WithContext(ctx).Create(session).Error
 }

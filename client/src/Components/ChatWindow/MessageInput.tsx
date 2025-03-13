@@ -1,3 +1,4 @@
+import { Card, Button, Row, Col, Form } from "react-bootstrap";
 import EmojiPicker from "emoji-picker-react";
 import { Smile, SendHorizontal } from "lucide-react";
 
@@ -18,37 +19,47 @@ export const MessageInput = ({
   handleEmojiClick,
 }: MessageInputProps) => {
   return (
-    <div className="border-3 border-gray-200 p-2 bg-white rounded-b-lg">
-      {showEmojiPicker && (
-        <div className="absolute bottom-20 left-0">
-          <EmojiPicker onEmojiClick={handleEmojiClick} />
-        </div>
-      )}
+    <Card className="border-gray-200 rounded-bottom-0">
+      <Card.Body className="p-2 bg-white">
+        {showEmojiPicker && (
+          <div className="position-absolute bottom-100 start-0">
+            <EmojiPicker onEmojiClick={handleEmojiClick} />
+          </div>
+        )}
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          <Smile size={20} />
-        </button>
+        <Row className="align-items-center g-2">
+          <Col xs="auto">
+            <Button
+              variant="link"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="text-secondary p-0"
+            >
+              <Smile size={20} />
+            </Button>
+          </Col>
 
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyPress={(e) => e.key === "Enter" && handleSend(newMessage)}
-          placeholder="Type a message..."
-          className="flex-1 border rounded-full py-2 px-4 focus:outline-none focus:border-blue-500"
-        />
+          <Col>
+            <Form.Control
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleSend(newMessage)}
+              placeholder="Type a message..."
+              className="rounded-pill border-1 bg-light"
+            />
+          </Col>
 
-        <button
-          onClick={() => handleSend(newMessage)}
-          className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600"
-        >
-          <SendHorizontal size={20} />
-        </button>
-      </div>
-    </div>
+          <Col xs="auto">
+            <Button
+              variant="primary"
+              onClick={() => handleSend(newMessage)}
+              className="rounded-circle p-2"
+            >
+              <SendHorizontal size={20} />
+            </Button>
+          </Col>
+        </Row>
+      </Card.Body>
+    </Card>
   );
 };

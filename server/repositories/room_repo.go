@@ -17,11 +17,11 @@ func NewRoomRepository(redis *redis.Client, db *gorm.DB) *RoomRepository {
 	return &RoomRepository{redis: redis, db: db}
 }
 
-func (r *RoomRepository) AddParticipant(ctx context.Context, roomID, userID string) error {
+func (r *RoomRepository) AddParticipant(ctx context.Context, roomID string, userID string) error {
 	return r.redis.SAdd(ctx, "room:"+roomID+":participants", userID).Err()
 }
 
-func (r *RoomRepository) RemoveParticipant(ctx context.Context, roomID, userID string) error {
+func (r *RoomRepository) RemoveParticipant(ctx context.Context, roomID string, userID string) error {
 	return r.redis.SRem(ctx, "room:"+roomID+":participants", userID).Err()
 }
 

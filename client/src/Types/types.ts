@@ -15,6 +15,6 @@ export type User = {
   imgUrl: string;
   isAudioOn: boolean;
   isPinned: boolean;
-  isVideoOn: boolean;
   videoStream: MediaStream | null;
+  isVideoOn?: boolean;
 };

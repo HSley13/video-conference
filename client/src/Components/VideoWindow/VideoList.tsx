@@ -1,74 +1,14 @@
 import { useState } from "react";
 import { VideoCard } from "./VideoCard";
-import { User } from "../../Types/types";
+import { useWebRTC } from "../../Contexts/WebRTCContext";
 
 export const VideoList = () => {
-  const [users] = useState<User[]>([
-    {
-      id: 1,
-      name: "John",
-      imgUrl: "https://randomuser.me/api/portraits/men/1.jpg",
-      isAudioOn: true,
-      isPinned: true,
-      videoStream: null,
-    },
-    {
-      id: 2,
-      name: "Sarah",
-      imgUrl: "https://randomuser.me/api/portraits/women/1.jpg",
-      isAudioOn: false,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 3,
-      name: "Alex",
-      imgUrl: "https://randomuser.me/api/portraits/men/2.jpg",
-      isAudioOn: true,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 4,
-      name: "Maria",
-      imgUrl: "https://randomuser.me/api/portraits/women/2.jpg",
-      isAudioOn: true,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 5,
-      name: "Emily",
-      imgUrl: "https://randomuser.me/api/portraits/women/3.jpg",
-      isAudioOn: false,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 6,
-      name: "Michael",
-      imgUrl: "https://randomuser.me/api/portraits/men/3.jpg",
-      isAudioOn: false,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 7,
-      name: "Olivia",
-      imgUrl: "https://randomuser.me/api/portraits/women/4.jpg",
-      isAudioOn: true,
-      isPinned: false,
-      videoStream: null,
-    },
-    {
-      id: 8,
-      name: "William",
-      imgUrl: "https://randomuser.me/api/portraits/men/4.jpg",
-      isAudioOn: true,
-      isPinned: false,
-      videoStream: null,
-    },
-  ]);
+  // const { localStream, remoteStreams, users } = useWebRTC();
+  //
+  // const usersWithStream = users.map((user) => ({
+  //   ...user,
+  //   videoStream: remoteStreams[user.id],
+  // }));
 
   // const handlePin = (userId: number) => {
   //   setUsers((prevUsers) =>
@@ -80,8 +20,8 @@ export const VideoList = () => {
   // };
   // const pinnedUser = users.find((user) => user.isPinned);
   // const mainUser = pinnedUser || users[0];
-  // const otherUsers = users.filter((user) => user.id !== mainUser.id);
-
+  // const otherUsers = usersWithStream.filter((user) => user.id !== mainUser.id);
+  const { users } = useWebRTC();
   const [pinnedId, setPinnedId] = useState<number | null>(1);
   const mainUser = pinnedId ? users.find((user) => user.id === pinnedId) : null;
   const otherUsers = users.filter((user) => user.id !== pinnedId);

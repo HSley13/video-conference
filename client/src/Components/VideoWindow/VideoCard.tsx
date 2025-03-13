@@ -5,6 +5,7 @@ import { Mic, MicOff, Pin, PinOff } from "lucide-react";
 type VideoCardProps = {
   id: number;
   name: string;
+  imgUrl: string;
   isAudioOn: boolean;
   isPinned: boolean;
   videoStream: MediaStream | null;

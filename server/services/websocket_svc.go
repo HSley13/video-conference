@@ -12,22 +12,24 @@ import (
 
 type WebSocketService struct {
 	roomRepo       *repositories.RoomRepository
+	userRepo       *repositories.UserRepository
 	connections    map[string]map[string]*websocket.Conn
 	mutex          sync.RWMutex
 	iceServers     []string
 	maxConnections int
 }
 
-func NewWebSocketService(roomRepo *repositories.RoomRepository, iceServers []string, maxConnections int) *WebSocketService {
+func NewWebSocketService(roomRepo *repositories.RoomRepository, userRepo *repositories.UserRepository, iceServers []string, maxConnections int) *WebSocketService {
 	return &WebSocketService{
 		roomRepo:       roomRepo,
+		userRepo:       userRepo,
 		connections:    make(map[string]map[string]*websocket.Conn),
 		iceServers:     iceServers,
 		maxConnections: maxConnections,
 	}
 }
 
-func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket.Conn, roomID, userID string) {
+func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket.Conn, roomID string, userID string) {
 	s.mutex.Lock()
 	if _, exists := s.connections[roomID]; !exists {
 		s.connections[roomID] = make(map[string]*websocket.Conn)
@@ -59,6 +61,16 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 
 	messages := s.roomRepo.SubscribeToRoom(ctx, roomID)
 
+	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		return
+	}
+
+	s.roomRepo.PublishMessage(ctx, roomID, map[string]interface{}{
+		"type": "user-joined",
+		"user": user,
+	})
+
 	go func() {
 		for {
 			mt, msg, err := conn.ReadMessage()
@@ -71,7 +83,11 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 				if err := json.Unmarshal(msg, &payload); err == nil {
 					payload["sender"] = userID
 					if modifiedMsg, err := json.Marshal(payload); err == nil {
-						s.roomRepo.PublishMessage(ctx, roomID, string(modifiedMsg))
+						s.roomRepo.PublishMessage(ctx, roomID, map[string]interface{}{
+							"type": "chat-message",
+							"user": userID,
+							"body": string(modifiedMsg),
+						})
 					}
 				}
 			}
@@ -92,6 +108,11 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 			break
 		}
 	}
+
+	s.roomRepo.PublishMessage(ctx, roomID, map[string]interface{}{
+		"type": "user-left",
+		"user": userID,
+	})
 }
 
 func (s *WebSocketService) CanJoinRoom(ctx context.Context, roomID string) (bool, error) {
@@ -114,4 +135,20 @@ func (s *WebSocketService) CanJoinRoom(ctx context.Context, roomID string) (bool
 	}
 
 	return true, nil
+}
+
+func (s *WebSocketService) NotifyUserJoined(ctx context.Context, roomID string, userID string) error {
+	payload := map[string]interface{}{
+		"type":   "user-joined",
+		"userID": userID,
+	}
+	return s.roomRepo.PublishMessage(ctx, roomID, payload)
+}
+
+func (s *WebSocketService) NotifyUserLeft(ctx context.Context, roomID string, userID string) error {
+	payload := map[string]interface{}{
+		"type":   "user-left",
+		"userID": userID,
+	}
+	return s.roomRepo.PublishMessage(ctx, roomID, payload)
 }
