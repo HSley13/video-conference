@@ -1,16 +1,16 @@
 export type Message = {
-  id: number;
+  id: string;
   text: string;
   time: string;
   user: {
-    id: number;
+    id: string;
     name: string;
     photo: string;
   };
 };
 
 export type User = {
-  id: number;
+  id: string;
   name: string;
   imgUrl: string;
   isAudioOn: boolean;

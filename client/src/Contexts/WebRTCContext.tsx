@@ -1,13 +1,13 @@
-// Contexts/WebRTCContext.ts
 import { createContext, useContext, useEffect, useState } from "react";
 import { User } from "../Types/types";
+import { v4 as uuidv4 } from "uuid";
 
 type WebRTCContextType = {
   localStream: MediaStream | null;
-  remoteStreams: Record<number, MediaStream>;
+  remoteStreams: Record<string, MediaStream>;
   users: User[];
-  addRemoteStream: (userId: number, stream: MediaStream) => void;
-  removeRemoteStream: (userId: number) => void;
+  addRemoteStream: (userId: string, stream: MediaStream) => void;
+  removeRemoteStream: (userId: string) => void;
   setUsers: (users: User[]) => void;
 };
 
@@ -23,11 +23,11 @@ const WebRTCContext = createContext<WebRTCContextType>({
 export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<
-    Record<number, MediaStream>
+    Record<string, MediaStream>
   >({});
   const [users, setUsers] = useState<User[]>([
     {
-      id: 1,
+      id: uuidv4(),
       name: "John",
       imgUrl: "https://randomuser.me/api/portraits/men/1.jpg",
       isAudioOn: true,
@@ -35,7 +35,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 2,
+      id: uuidv4(),
       name: "Sarah",
       imgUrl: "https://randomuser.me/api/portraits/women/1.jpg",
       isAudioOn: false,
@@ -43,7 +43,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 3,
+      id: uuidv4(),
       name: "Alex",
       imgUrl: "https://randomuser.me/api/portraits/men/2.jpg",
       isAudioOn: true,
@@ -51,7 +51,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 4,
+      id: uuidv4(),
       name: "Maria",
       imgUrl: "https://randomuser.me/api/portraits/women/2.jpg",
       isAudioOn: true,
@@ -59,7 +59,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 5,
+      id: uuidv4(),
       name: "Emily",
       imgUrl: "https://randomuser.me/api/portraits/women/3.jpg",
       isAudioOn: false,
@@ -67,7 +67,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 6,
+      id: uuidv4(),
       name: "Michael",
       imgUrl: "https://randomuser.me/api/portraits/men/3.jpg",
       isAudioOn: false,
@@ -75,7 +75,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 7,
+      id: uuidv4(),
       name: "Olivia",
       imgUrl: "https://randomuser.me/api/portraits/women/4.jpg",
       isAudioOn: true,
@@ -83,7 +83,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
       videoStream: null,
     },
     {
-      id: 8,
+      id: uuidv4(),
       name: "William",
       imgUrl: "https://randomuser.me/api/portraits/men/4.jpg",
       isAudioOn: true,
@@ -92,7 +92,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
     },
   ]);
 
-  const addRemoteStream = (userId: number, stream: MediaStream) => {
+  const addRemoteStream = (userId: string, stream: MediaStream) => {
     setRemoteStreams((prevStreams) => ({
       ...prevStreams,
       [userId]: stream,
@@ -120,7 +120,7 @@ export const WebRTCProvider = ({ children }: { children: React.ReactNode }) => {
     });
   };
 
-  const removeRemoteStream = (userId: number) => {
+  const removeRemoteStream = (userId: string) => {
     setRemoteStreams((prevStreams) => {
       const updatedStreams = { ...prevStreams };
       delete updatedStreams[userId];

@@ -9,6 +9,7 @@ import (
 	"video-conference/config"
 	"video-conference/models"
 	"video-conference/repositories"
+	"video-conference/seed"
 	"video-conference/server"
 	"video-conference/services"
 )
@@ -24,6 +25,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to PostgreSQL:", err)
 	}
+
+	seed.Seed(db)
 
 	if err := db.AutoMigrate(
 		&models.User{},
@@ -44,8 +47,8 @@ func main() {
 	roomRepo := repositories.NewRoomRepository(redisClient, db)
 
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
-	websocketSvc := services.NewWebSocketService(roomRepo, cfg.WebRTCIceServers, cfg.MaxConnections)
+	websocketSvc := services.NewWebSocketService(roomRepo, userRepo, cfg.WebRTCIceServers, cfg.MaxConnections)
 
-	srv := server.New(cfg, authSvc, websocketSvc)
+	srv := server.New(cfg, authSvc, websocketSvc, roomRepo)
 	srv.Start()
 }

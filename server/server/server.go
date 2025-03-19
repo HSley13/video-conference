@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 	"video-conference/config"
+	"video-conference/models"
+	"video-conference/repositories"
 	"video-conference/services"
 	"video-conference/utils"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/websocket/v2"
+	"github.com/google/uuid"
 )
 
 type Server struct {
@@ -23,9 +26,10 @@ type Server struct {
 	cfg          *config.Config
 	authSvc      *services.AuthService
 	websocketSvc *services.WebSocketService
+	roomRepo     *repositories.RoomRepository
 }
 
-func New(cfg *config.Config, authSvc *services.AuthService, websocketSvc *services.WebSocketService) *Server {
+func New(cfg *config.Config, authSvc *services.AuthService, websocketSvc *services.WebSocketService, roomRepo *repositories.RoomRepository) *Server {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: utils.GlobalErrorHandler,
 	})
@@ -34,13 +38,14 @@ func New(cfg *config.Config, authSvc *services.AuthService, websocketSvc *servic
 		cfg:          cfg,
 		authSvc:      authSvc,
 		websocketSvc: websocketSvc,
+		roomRepo:     roomRepo,
 	}
 }
 
 func (s *Server) SetupMiddleware() {
 	s.app.Use(recover.New())
 	s.app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3001",
+		AllowOrigins:     os.Getenv("ALLOWED_ORIGINS"),
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,
@@ -60,7 +65,7 @@ func (s *Server) SetupRoutes() {
 
 	ws := api.Group("/ws")
 	ws.Use(s.authenticateWS)
-	ws.Get("/:roomID", websocket.New(s.handleWebSocket))
+	ws.Get("/:roomID/:userID", websocket.New(s.handleWebSocket))
 
 	api.Get("/health", s.healthCheck)
 }
@@ -125,23 +130,23 @@ func (s *Server) handleRefreshToken(c *fiber.Ctx) error {
 
 func (s *Server) authenticateWS(c *fiber.Ctx) error {
 	if websocket.IsWebSocketUpgrade(c) {
-		token := c.Get("Authorization", c.Cookies("access_token"))
-		if token == "" {
-			return fiber.ErrUnauthorized
-		}
-
-		claims, err := s.authSvc.ValidateToken(token)
-		if err != nil {
-			return fiber.ErrUnauthorized
-		}
-
-		userID, ok := claims["sub"].(string)
-		if !ok {
-			return fiber.ErrUnauthorized
-		}
+		// 	token := c.Get("Authorization", c.Cookies("access_token"))
+		// 	if token == "" {
+		// 		return fiber.ErrUnauthorized
+		// 	}
+		//
+		// 	claims, err := s.authSvc.ValidateToken(token)
+		// 	if err != nil {
+		// 		return fiber.ErrUnauthorized
+		// 	}
+		//
+		// 	userID, ok := claims["sub"].(string)
+		// 	if !ok {
+		// 		return fiber.ErrUnauthorized
+		// 	}
 
 		c.Locals("ctx", c.Context())
-		c.Locals("userID", userID)
+		// c.Locals("userID", userID)
 		return c.Next()
 	}
 	return fiber.ErrUpgradeRequired
@@ -155,17 +160,51 @@ func (s *Server) handleWebSocket(c *websocket.Conn) {
 		return
 	}
 
-	userID := c.Locals("userID").(string)
-	roomID := c.Params("roomID")
+	userIDStr := c.Params("userID")
+	roomIDStr := c.Params("roomID")
 
-	allowed, err := s.websocketSvc.CanJoinRoom(ctx, roomID)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		log.Printf("Invalid userID %s: %v\n", userIDStr, err)
+	}
+
+	roomID, err := uuid.Parse(roomIDStr)
+	if err != nil {
+		log.Printf("Invalid roomID %s, generating a new UUID: %v\n", roomIDStr, err)
+		roomID = uuid.New()
+	}
+
+	_, err = s.roomRepo.GetRoom(ctx, roomID.String())
+	if err != nil {
+		log.Printf("Creating room %s: %v\n", roomID, err)
+		newRoom := &models.Room{
+			ID:              roomID,
+			Name:            "New Room",
+			OwnerID:         userID,
+			IsActive:        true,
+			MaxParticipants: 10,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		}
+
+		err = s.roomRepo.CreateRoom(ctx, newRoom)
+		if err != nil {
+			log.Printf("Error creating room %s: %v\n", roomID, err)
+			c.WriteJSON(fiber.Map{"error": "Internal server error"})
+			c.Close()
+			return
+		}
+	}
+
+	allowed, err := s.websocketSvc.CanJoinRoom(ctx, roomID.String())
 	if err != nil || !allowed {
 		c.WriteJSON(fiber.Map{"error": "Cannot join room"})
 		c.Close()
 		return
 	}
 
-	s.websocketSvc.HandleConnection(ctx, c, roomID, userID)
+	log.Printf("User %s joined room %s\n", userID, roomID)
+	s.websocketSvc.HandleConnection(ctx, c, roomID.String(), userID.String())
 }
 
 func (s *Server) healthCheck(c *fiber.Ctx) error {

@@ -21,7 +21,7 @@ export const VideoList = () => {
   // const pinnedUser = users.find((user) => user.isPinned);
   // const mainUser = pinnedUser || users[0];
   // const otherUsers = usersWithStream.filter((user) => user.id !== mainUser.id);
-  const { users } = useWebRTC();
+  const { users, localStream } = useWebRTC();
   const [pinnedId, setPinnedId] = useState<number | null>(1);
   const mainUser = pinnedId ? users.find((user) => user.id === pinnedId) : null;
   const otherUsers = users.filter((user) => user.id !== pinnedId);
@@ -30,7 +30,12 @@ export const VideoList = () => {
     <div className="flex flex-col h-screen w-100 bg-gray-200 rounded-lg">
       <div className="flex-1 w-100 rounded-xl overflow-hidden">
         {mainUser ? (
-          <VideoCard key={mainUser.id} {...mainUser} onPin={setPinnedId} />
+          <VideoCard
+            key={mainUser.id}
+            {...mainUser}
+            videoStream={localStream}
+            onPin={setPinnedId}
+          />
         ) : (
           <div className="w-100 h-100 bg-gray-200 flex items-center justify-center text-gray-400">
             Click the pin icon on any participant to feature them here

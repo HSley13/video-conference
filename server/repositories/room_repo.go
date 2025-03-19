@@ -43,3 +43,7 @@ func (r *RoomRepository) GetRoom(ctx context.Context, roomID string) (*models.Ro
 	result := r.db.WithContext(ctx).First(&room, "id = ?", roomID)
 	return &room, result.Error
 }
+
+func (r *RoomRepository) CreateRoom(ctx context.Context, room *models.Room) error {
+	return r.db.WithContext(ctx).Create(room).Error
+}

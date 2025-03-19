@@ -4,13 +4,15 @@ import { MessageInput } from "./MessageInput";
 import { useVideoConference } from "../../Hooks/websocket";
 
 export const ChatWindow = () => {
-  const userID = 123;
-  const userName = "Sley";
-  const userPhoto = "https://randomuser.me/api/portraits/men/2.jpg";
-  const roomID = "123";
+  const userID = import.meta.env.VITE_USER_ID;
+  const userName = import.meta.env.VITE_USER_NAME;
+  const userPhoto = import.meta.env.VITE_USER_PHOTO;
+  const roomID = "550e8400-e29b-41d4-a716-446655440000";
   const [newMessage, setNewMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  console.log("userID: ", userID);
 
   const { chatMessages, sendChatMessage } = useVideoConference(
     roomID,
