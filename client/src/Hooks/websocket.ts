@@ -61,6 +61,7 @@ export const useVideoConference = (
 
         switch (message.type) {
           case "user-joined":
+            console.log("User joined:", message);
             if (message.userID !== userID) {
               setUsers((prevUsers) => [
                 ...prevUsers,

@@ -25,3 +25,11 @@ type Participant struct {
 	LeftAt    *time.Time `gorm:"null" json:"left_at"`
 	SessionID uuid.UUID  `gorm:"type:uuid;not null"`
 }
+
+type Code struct {
+	ID       string    `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()" json:"id"`
+	UserID   string    `gorm:"not null;type:uuid;index" json:"user_id"`
+	User     User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE;OnUpdate:CASCADE" json:"user"`
+	Code     string    `gorm:"not null;type:text" json:"code"`
+	ExpireAt time.Time `gorm:"not null" json:"expire_at"`
+}

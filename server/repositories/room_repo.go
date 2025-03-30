@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"log"
 	"video-conference/models"
 
 	"github.com/go-redis/redis/v8"
@@ -34,6 +35,7 @@ func (r *RoomRepository) PublishMessage(ctx context.Context, roomID string, mess
 }
 
 func (r *RoomRepository) SubscribeToRoom(ctx context.Context, roomID string) <-chan *redis.Message {
+	log.Printf("Subscribing to Room: %s", roomID)
 	pubsub := r.redis.Subscribe(ctx, "room:"+roomID)
 	return pubsub.Channel()
 }

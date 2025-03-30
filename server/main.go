@@ -3,13 +3,10 @@ package main
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"log"
 	"video-conference/config"
-	"video-conference/models"
+	"video-conference/db_aws"
 	"video-conference/repositories"
-	"video-conference/seed"
 	"video-conference/server"
 	"video-conference/services"
 )
@@ -21,21 +18,7 @@ func main() {
 
 	cfg := config.Load()
 
-	db, err := gorm.Open(postgres.Open(cfg.PostgresDSN), &gorm.Config{})
-	if err != nil {
-		log.Fatal("Failed to connect to PostgreSQL:", err)
-	}
-
-	seed.Seed(db)
-
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Session{},
-		&models.Room{},
-		&models.Participant{},
-	); err != nil {
-		log.Fatal("Database migration failed:", err)
-	}
+	db := db_aws.InitDb(cfg.PostgresDSN)
 
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {

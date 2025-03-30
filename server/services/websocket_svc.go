@@ -102,6 +102,8 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 		},
 	})
 
+	log.Printf("Message user-joined has been sent %s\n", user)
+
 	go func() {
 		for {
 			mt, msg, err := conn.ReadMessage()
@@ -134,6 +136,7 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 						})
 
 					case "offer", "answer", "ice-candidate":
+						log.Println("offer, answer, ice-candidate message received")
 						if to, ok := payload["to"].(string); ok {
 							s.mutex.RLock()
 							if recipientConn, exists := s.connections[roomID][to]; exists {
