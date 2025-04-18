@@ -2,7 +2,7 @@ package repositories
 
 import (
 	"context"
-	"log"
+	"encoding/json"
 	"video-conference/models"
 
 	"github.com/go-redis/redis/v8"
@@ -12,6 +12,11 @@ import (
 type RoomRepository struct {
 	redis *redis.Client
 	db    *gorm.DB
+}
+
+type RoomSubscription struct {
+	PubSub  *redis.PubSub
+	Channel <-chan *redis.Message
 }
 
 func NewRoomRepository(redis *redis.Client, db *gorm.DB) *RoomRepository {
@@ -31,13 +36,12 @@ func (r *RoomRepository) GetParticipants(ctx context.Context, roomID string) ([]
 }
 
 func (r *RoomRepository) PublishMessage(ctx context.Context, roomID string, message interface{}) error {
-	return r.redis.Publish(ctx, "room:"+roomID, message).Err()
-}
+	jsonMsg, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	return r.redis.Publish(ctx, "room:"+roomID, jsonMsg).Err()
 
-func (r *RoomRepository) SubscribeToRoom(ctx context.Context, roomID string) <-chan *redis.Message {
-	log.Printf("Subscribing to Room: %s", roomID)
-	pubsub := r.redis.Subscribe(ctx, "room:"+roomID)
-	return pubsub.Channel()
 }
 
 func (r *RoomRepository) GetRoom(ctx context.Context, roomID string) (*models.Room, error) {
@@ -48,4 +52,26 @@ func (r *RoomRepository) GetRoom(ctx context.Context, roomID string) (*models.Ro
 
 func (r *RoomRepository) CreateRoom(ctx context.Context, room *models.Room) error {
 	return r.db.WithContext(ctx).Create(room).Error
+}
+
+func (r *RoomRepository) SubscribeToRoom(ctx context.Context, roomID string) (*RoomSubscription, error) {
+	pubsub := r.redis.Subscribe(ctx, "room:"+roomID)
+
+	_, err := pubsub.Receive(ctx)
+	if err != nil {
+		pubsub.Close()
+		return nil, err
+	}
+
+	return &RoomSubscription{
+		PubSub:  pubsub,
+		Channel: pubsub.Channel(),
+	}, nil
+}
+
+func (r *RoomRepository) UnsubscribeFromRoom(ctx context.Context, sub *RoomSubscription) error {
+	if sub == nil || sub.PubSub == nil {
+		return nil
+	}
+	return sub.PubSub.Close()
 }
