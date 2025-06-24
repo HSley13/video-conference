@@ -18,94 +18,82 @@ import (
 
 type AuthService struct {
 	userRepo  *repositories.UserRepository
-	jwtSecret string
+	jwtSecret []byte
 }
 
-func NewAuthService(userRepo *repositories.UserRepository, jwtSecret string) *AuthService {
-	return &AuthService{userRepo: userRepo, jwtSecret: jwtSecret}
+func NewAuthService(repo *repositories.UserRepository, secret string) *AuthService {
+	return &AuthService{userRepo: repo, jwtSecret: []byte(secret)}
 }
 
-func (s *AuthService) Register(ctx context.Context, email string, password string) (*models.User, error) {
-	hashedPassword, err := HashPassword(password)
+func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
+	hash, err := HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
+	name := strings.Split(email, "@")[0]
 	user := &models.User{
+		Name:         name,
+		ImgUrl:       "https://via.placeholder.com/150",
 		Email:        email,
-		HashPassword: string(hashedPassword),
+		HashPassword: hash,
 	}
 
 	if err := s.userRepo.CreateUser(ctx, user); err != nil {
 		return nil, err
 	}
-
 	return user, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, email string, password string) (string, string, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
-	if err != nil {
+	if err != nil || VerifyPassword(password, user.HashPassword) != nil {
 		return "", "", errors.New("invalid credentials")
 	}
 
-	if err := VerifyPassword(password, user.HashPassword); err != nil {
-		return "", "", errors.New("invalid credentials")
-	}
-
-	accessToken, err := s.generateAccessToken(user.ID.String())
+	access, err := s.generateAccessToken(user.ID.String())
 	if err != nil {
 		return "", "", err
 	}
-
-	refreshToken, err := s.generateRefreshToken(user.ID.String())
+	refresh, err := s.generateRefreshToken(user.ID.String())
 	if err != nil {
 		return "", "", err
 	}
 
 	session := &models.Session{
 		UserID:       user.ID,
-		RefreshToken: refreshToken,
+		RefreshToken: refresh,
 		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
 	}
-
 	if err := s.userRepo.CreateSession(ctx, session); err != nil {
 		return "", "", err
 	}
 
-	return accessToken, refreshToken, nil
+	return access, refresh, nil
 }
-
-func (s *AuthService) generateAccessToken(userID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID,
+func (s *AuthService) generateAccessToken(uid string) (string, error) {
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": uid,
 		"exp": time.Now().Add(15 * time.Minute).Unix(),
-	})
-	return token.SignedString([]byte(s.jwtSecret))
+	}).SignedString(s.jwtSecret)
 }
 
-func (s *AuthService) generateRefreshToken(userID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID,
+func (s *AuthService) generateRefreshToken(uid string) (string, error) {
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": uid,
 		"exp": time.Now().Add(7 * 24 * time.Hour).Unix(),
-	})
-	return token.SignedString([]byte(s.jwtSecret))
+	}).SignedString(s.jwtSecret)
 }
 
-func (s *AuthService) ValidateToken(tokenString string) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(s.jwtSecret), nil
-	})
-
-	if err != nil || !token.Valid {
+func (s *AuthService) ValidateToken(tok string) (jwt.MapClaims, error) {
+	parsed, err := jwt.Parse(tok, func(t *jwt.Token) (interface{}, error) { return s.jwtSecret, nil })
+	if err != nil || !parsed.Valid {
 		return nil, errors.New("invalid token")
 	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
+	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, errors.New("invalid token claims")
+		return nil, errors.New("invalid claims")
 	}
-
 	return claims, nil
 }
 
@@ -114,17 +102,12 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 	if err != nil {
 		return "", errors.New("invalid refresh token")
 	}
-
 	userID := claims["sub"].(string)
-	session, err := s.userRepo.GetSession(ctx, userID)
-	if err != nil || session.RefreshToken != refreshToken {
-		return "", errors.New("invalid session")
-	}
 
-	if time.Now().After(session.ExpiresAt) {
-		return "", errors.New("session expired")
+	session, err := s.userRepo.GetSessionByUserID(ctx, userID)
+	if err != nil || session.RefreshToken != refreshToken || time.Now().After(session.ExpiresAt) {
+		return "", errors.New("invalid or expired session")
 	}
-
 	return s.generateAccessToken(userID)
 }
 

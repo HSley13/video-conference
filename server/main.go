@@ -1,9 +1,11 @@
 package main
 
 import (
+	"log"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
-	"log"
+
 	"video-conference/config"
 	"video-conference/db_aws"
 	"video-conference/repositories"
@@ -12,26 +14,36 @@ import (
 )
 
 func main() {
+	/* -------------------- env / config -------------------- */
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
 	}
-
 	cfg := config.Load()
 
+	/* -------------------- database ------------------------ */
 	db := db_aws.InitDb(cfg.PostgresDSN)
 
+	/* -------------------- redis --------------------------- */
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		log.Fatal("Failed to parse Redis URL:", err)
+		log.Fatalf("Failed to parse Redis URL: %v", err)
 	}
 	redisClient := redis.NewClient(redisOpts)
+	defer redisClient.Close()
 
+	/* ---------------- repositories / services ------------- */
 	userRepo := repositories.NewUserRepository(db)
 	roomRepo := repositories.NewRoomRepository(redisClient, db)
 
 	authSvc := services.NewAuthService(userRepo, cfg.JWTSecret)
-	websocketSvc := services.NewWebSocketService(roomRepo, userRepo, cfg.WebRTCIceServers, cfg.MaxConnections)
+	wsSvc := services.NewWebSocketService(
+		roomRepo,
+		userRepo,
+		cfg.WebRTCIceServers,
+		cfg.MaxConnections,
+	)
 
-	srv := server.New(cfg, authSvc, websocketSvc, roomRepo)
+	/* -------------------- server -------------------------- */
+	srv := server.New(cfg, authSvc, wsSvc, roomRepo, userRepo)
 	srv.Start()
 }

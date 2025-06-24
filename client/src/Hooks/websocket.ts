@@ -4,315 +4,218 @@ import { Message } from "../Types/types";
 import { FormatTime } from "../Utils/utils";
 import { v4 as uuidv4 } from "uuid";
 
+const getSubFromJWT = (jwt: string): string | null => {
+  try {
+    const [, payload] = jwt.split(".");
+    return JSON.parse(atob(payload)).sub as string;
+  } catch {
+    return null;
+  }
+};
+
 export const useVideoConference = (
   roomID: string,
-  userID: string,
+  userIDInput: string | undefined,
   userName: string,
   userPhoto: string,
+  accessToken: string,
 ) => {
+  const userID = userIDInput ?? getSubFromJWT(accessToken) ?? "";
   const { localStream, addRemoteStream, removeRemoteStream, setUsers } =
     useWebRTC();
+
   const wsRef = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
-
-  const [chatMessages, setChatMessages] = useState<Message[]>([
-    {
-      id: uuidv4(),
-      text: "Hey, how are you?",
-      time: FormatTime(new Date()),
-      user: {
-        id: uuidv4(),
-        name: "John",
-        photo: "https://randomuser.me/api/portraits/men/1.jpg",
-      },
-    },
-    {
-      id: uuidv4(),
-      text: "I'm good thanks! 😊",
-      time: FormatTime(new Date()),
-      user: {
-        id: uuidv4(),
-        name: "Sarah",
-        photo: "https://randomuser.me/api/portraits/women/1.jpg",
-      },
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
 
   useEffect(() => {
-    const connectWebSocket = () => {
+    if (!userID || !accessToken) return;
+
+    const connect = () => {
       wsRef.current = new WebSocket(
-        `ws://localhost:3002/video-conference/ws/${roomID}/${userID}`,
+        `ws://localhost:3002/video-conference/ws/${roomID}/${userID}` +
+          `?access_token=${encodeURIComponent(accessToken)}`,
       );
 
-      wsRef.current.onopen = () => {
-        console.log("WebSocket connection established");
-        wsRef.current?.send(
-          JSON.stringify({
-            type: "user-joined",
-            userID,
-            userName,
-            userPhoto,
-          }),
-        );
-      };
+      wsRef.current.onopen = () => console.log("WebSocket open ✔");
 
-      wsRef.current.onmessage = async (event) => {
-        const message = JSON.parse(event.data);
+      wsRef.current.onmessage = async (ev) => {
+        const msg = JSON.parse(ev.data);
 
-        switch (message.type) {
+        switch (msg.type) {
+          case "users-list":
+            setUsers(
+              msg.users.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                imgUrl: u.imgUrl,
+                isAudioOn: true,
+                isVideoOn: true,
+                isPinned: false,
+                videoStream: null,
+              })),
+            );
+            msg.users.forEach((u: any) => {
+              if (u.id !== userID) initiateWebRTC(u.id);
+            });
+            break;
+
           case "user-joined":
-            console.log("User joined:", message);
-            if (message.userID !== userID) {
-              setUsers((prevUsers) => [
-                ...prevUsers,
+            if (msg.userID !== userID) {
+              setUsers((prev) => [
+                ...prev,
                 {
-                  id: message.userID,
-                  name: message.userName,
-                  imgUrl: message.userPhoto,
+                  id: msg.userID,
+                  name: msg.userName,
+                  imgUrl: msg.userPhoto,
                   isAudioOn: true,
-                  isPinned: false,
                   isVideoOn: true,
+                  isPinned: false,
                   videoStream: null,
                 },
               ]);
-              initiateWebRTCConnection(message.userID);
+              initiateWebRTC(msg.userID);
             }
             break;
 
           case "user-left":
-            setUsers((prevUsers) =>
-              prevUsers.filter((user) => user.id !== message.userID),
-            );
-            removeRemoteStream(message.userID);
-            closePeerConnection(message.userID);
-            break;
-
-          case "users-list":
-            setUsers(message.users);
-            message.users.forEach((user: { id: string }) => {
-              if (user.id !== userID) {
-                initiateWebRTCConnection(user.id);
-              }
-            });
+            setUsers((prev) => prev.filter((u) => u.id !== msg.userID));
+            removeRemoteStream(msg.userID);
+            closePeer(msg.userID);
             break;
 
           case "offer":
-            await handleOffer(message.offer, message.from);
+            await handleOffer(msg.offer, msg.from);
             break;
 
           case "answer":
-            await handleAnswer(message.answer, message.from);
+            await handleAnswer(msg.answer, msg.from);
             break;
 
           case "ice-candidate":
-            await handleICECandidate(message.candidate, message.from);
+            await handleCandidate(msg.candidate, msg.from);
             break;
 
           case "chat-message":
-            setChatMessages((prevMessages) => [
-              ...prevMessages,
+            setChatMessages((p) => [
+              ...p,
               {
-                id: message.id,
-                text: message.text,
-                time: new Date().toLocaleTimeString(),
-                user: {
-                  id: message.user.id,
-                  name: message.user.name,
-                  photo: message.user.photo,
-                },
+                id: msg.id,
+                text: msg.text,
+                time: msg.time,
+                user: msg.user,
               },
             ]);
             break;
 
           default:
-            console.log("Received message:", message);
+            console.log("unhandled:", msg);
         }
       };
 
-      wsRef.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-
+      wsRef.current.onerror = (e) => console.error("WS error", e);
       wsRef.current.onclose = () => {
-        console.log("WebSocket connection closed. Reconnecting...");
-        setTimeout(connectWebSocket, 3000);
+        console.log("WS closed → retry in 3 s");
+        setTimeout(connect, 3_000);
       };
     };
 
-    connectWebSocket();
-
+    connect();
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      wsRef.current?.close();
       Object.values(peerConnections.current).forEach((pc) => pc.close());
     };
-  }, [roomID, userID, userName, userPhoto, setUsers, removeRemoteStream]);
+  }, [roomID, userID, accessToken]);
 
   const sendChatMessage = (text: string) => {
-    if (wsRef.current) {
-      const message: Message = {
-        id: uuidv4(),
-        text,
-        time: new Date().toLocaleTimeString(),
-        user: {
-          id: userID,
-          name: userName,
-          photo: userPhoto,
-        },
-      };
-
-      wsRef.current.send(
-        JSON.stringify({
-          type: "chat-message",
-          message: message,
-        }),
-      );
-    }
+    if (!wsRef.current) return;
+    const message: Message = {
+      id: uuidv4(),
+      text,
+      time: FormatTime(new Date()),
+      user: { id: userID, name: userName, photo: userPhoto },
+    };
+    wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
   };
 
-  const initiateWebRTCConnection = async (remoteUserID: string) => {
-    if (peerConnections.current[remoteUserID]) {
-      console.log("Connection already exists with user:", remoteUserID);
-      return;
-    }
+  const initiateWebRTC = async (remoteID: string) => {
+    if (peerConnections.current[remoteID]) return;
 
-    const peerConnection = new RTCPeerConnection({
+    const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    localStream?.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream);
-    });
+    localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-    peerConnection.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      addRemoteStream(remoteUserID, remoteStream);
-    };
+    pc.ontrack = (ev) => addRemoteStream(remoteID, ev.streams[0]);
+    pc.onicecandidate = (ev) =>
+      ev.candidate &&
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "ice-candidate",
+          candidate: ev.candidate,
+          to: remoteID,
+        }),
+      );
 
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate && wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "ice-candidate",
-            candidate: event.candidate,
-            to: remoteUserID,
-          }),
-        );
-      }
-    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    wsRef.current?.send(JSON.stringify({ type: "offer", offer, to: remoteID }));
 
-    try {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      if (wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "offer",
-            offer: offer,
-            to: remoteUserID,
-          }),
-        );
-      }
-    } catch (error) {
-      console.error("Error creating offer:", error);
-    }
-
-    peerConnections.current[remoteUserID] = peerConnection;
+    peerConnections.current[remoteID] = pc;
   };
 
   const handleOffer = async (
     offer: RTCSessionDescriptionInit,
-    remoteUserID: string,
+    remoteID: string,
   ) => {
-    if (peerConnections.current[remoteUserID]) {
-      console.log("Connection already exists with user:", remoteUserID);
-      return;
-    }
-
-    const peerConnection = new RTCPeerConnection({
+    if (peerConnections.current[remoteID]) return;
+    const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    localStream?.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream);
-    });
+    localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    pc.ontrack = (ev) => addRemoteStream(remoteID, ev.streams[0]);
+    pc.onicecandidate = (ev) =>
+      ev.candidate &&
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "ice-candidate",
+          candidate: ev.candidate,
+          to: remoteID,
+        }),
+      );
 
-    peerConnection.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      addRemoteStream(remoteUserID, remoteStream);
-    };
+    await pc.setRemoteDescription(offer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    wsRef.current?.send(
+      JSON.stringify({ type: "answer", answer, to: remoteID }),
+    );
 
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate && wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "ice-candidate",
-            candidate: event.candidate,
-            to: remoteUserID,
-          }),
-        );
-      }
-    };
-
-    try {
-      await peerConnection.setRemoteDescription(offer);
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      if (wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "answer",
-            answer: answer,
-            to: remoteUserID,
-          }),
-        );
-      }
-    } catch (error) {
-      console.error("Error handling offer:", error);
-    }
-
-    peerConnections.current[remoteUserID] = peerConnection;
+    peerConnections.current[remoteID] = pc;
   };
 
   const handleAnswer = async (
     answer: RTCSessionDescriptionInit,
-    remoteUserID: string,
+    remoteID: string,
   ) => {
-    const peerConnection = peerConnections.current[remoteUserID];
-    if (peerConnection) {
-      try {
-        await peerConnection.setRemoteDescription(answer);
-      } catch (error) {
-        console.error("Error setting remote description:", error);
-      }
-    }
+    await peerConnections.current[remoteID]?.setRemoteDescription(answer);
   };
 
-  const handleICECandidate = async (
-    candidate: RTCIceCandidateInit,
-    remoteUserID: string,
+  const handleCandidate = async (
+    cand: RTCIceCandidateInit,
+    remoteID: string,
   ) => {
-    const peerConnection = peerConnections.current[remoteUserID];
-    if (peerConnection) {
-      try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (error) {
-        console.error("Error adding ICE candidate:", error);
-      }
-    }
+    await peerConnections.current[remoteID]?.addIceCandidate(
+      new RTCIceCandidate(cand),
+    );
   };
 
-  const closePeerConnection = (remoteUserID: string) => {
-    const peerConnection = peerConnections.current[remoteUserID];
-    if (peerConnection) {
-      peerConnection.close();
-      delete peerConnections.current[remoteUserID];
-    }
+  const closePeer = (remoteID: string) => {
+    peerConnections.current[remoteID]?.close();
+    delete peerConnections.current[remoteID];
   };
 
-  return {
-    chatMessages,
-    sendChatMessage,
-  };
+  return { chatMessages, sendChatMessage };
 };

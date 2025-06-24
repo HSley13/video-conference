@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"log"
 	"sync"
-	"time"
 	"video-conference/models"
 	"video-conference/repositories"
 
 	"github.com/gofiber/websocket/v2"
+	"github.com/google/uuid"
 )
 
 type WebSocketService struct {
@@ -24,217 +23,171 @@ type WebSocketService struct {
 	maxConnections int
 }
 
-func NewWebSocketService(roomRepo *repositories.RoomRepository, userRepo *repositories.UserRepository, iceServers []string, maxConnections int) *WebSocketService {
+func NewWebSocketService(rRepo *repositories.RoomRepository, uRepo *repositories.UserRepository,
+	ice []string, max int) *WebSocketService {
 	return &WebSocketService{
-		roomRepo:       roomRepo,
-		userRepo:       userRepo,
+		roomRepo:       rRepo,
+		userRepo:       uRepo,
 		connections:    make(map[string]map[string]*websocket.Conn),
-		iceServers:     iceServers,
-		maxConnections: maxConnections,
+		iceServers:     ice,
+		maxConnections: max,
 	}
 }
 
-func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket.Conn, roomID string, userID string) {
-	log.Printf("User %s is connecting to room %s\n", userID, roomID)
-
+func (s *WebSocketService) HandleConnection(
+	ctx context.Context,
+	conn *websocket.Conn,
+	roomID, userID string,
+) {
 	s.mutex.Lock()
-	if _, exists := s.connections[roomID]; !exists {
+	if _, ok := s.connections[roomID]; !ok {
 		s.connections[roomID] = make(map[string]*websocket.Conn)
 	}
 	s.connections[roomID][userID] = conn
-	connectionCount := len(s.connections[roomID])
+	count := len(s.connections[roomID])
 	s.mutex.Unlock()
 
-	defer func() {
-		s.mutex.Lock()
-		delete(s.connections[roomID], userID)
-		if len(s.connections[roomID]) == 0 {
-			delete(s.connections, roomID)
-		}
-		s.mutex.Unlock()
-		log.Printf("User %s has disconnected from room %s\n", userID, roomID)
-	}()
+	log.Printf("[ROOM %s] new socket %s (peers=%d)", roomID, userID, count)
+	defer s.cleanupConnection(ctx, roomID, userID)
 
-	if connectionCount > s.maxConnections {
-		log.Printf("Room %s has reached maximum connections (%d)\n", roomID, s.maxConnections)
-		conn.WriteJSON(map[string]interface{}{
-			"type":    "error",
-			"message": "Room is full",
-		})
+	if count > s.maxConnections {
+		_ = conn.WriteJSON(fiberMap("error", "room full"))
 		conn.Close()
 		return
 	}
 
-	if err := s.roomRepo.AddParticipant(ctx, roomID, userID); err != nil {
-		log.Printf("Error adding user %s to room %s: %v\n", userID, roomID, err)
-		conn.WriteJSON(map[string]interface{}{
-			"type":    "error",
-			"message": "Failed to join room",
-		})
-		conn.Close()
-		return
-	}
-	defer func() {
-		if err := s.roomRepo.RemoveParticipant(ctx, roomID, userID); err != nil {
-			log.Printf("Error removing user %s from room %s: %v\n", userID, roomID, err)
-		}
-	}()
+	_ = s.roomRepo.AddParticipant(ctx, roomID, userID)
+	defer s.roomRepo.RemoveParticipant(ctx, roomID, userID)
 
-	iceConfig := map[string]interface{}{
-		"type":       "iceServers",
-		"iceServers": s.iceServers,
-	}
-	if err := conn.WriteJSON(iceConfig); err != nil {
-		log.Printf("Error sending ICE config to user %s: %v\n", userID, err)
-		return
-	}
+	_ = conn.WriteJSON(fiberMap("type", "iceServers", "iceServers", s.iceServers))
 
-	subscription, err := s.roomRepo.SubscribeToRoom(ctx, roomID)
+	user := s.ensureUser(ctx, userID)
+
+	joinPayload := fiberMap(
+		"type", "user-joined",
+		"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
+		"sender", userID,
+	)
+	_ = s.roomRepo.PublishMessage(ctx, roomID, joinPayload)
+	log.Printf("[ROOM %s] broadcast user-joined: %+v", roomID, joinPayload)
+
+	sub, err := s.roomRepo.SubscribeToRoom(ctx, roomID)
 	if err != nil {
-		log.Printf("Error subscribing to room %s: %v\n", roomID, err)
+		log.Printf("subscribe error: %v", err)
 		return
 	}
-	defer func() {
-		if err := s.roomRepo.UnsubscribeFromRoom(ctx, subscription); err != nil {
-			log.Printf("Error unsubscribing from room %s: %v\n", roomID, err)
-		}
-	}()
+	defer s.roomRepo.UnsubscribeFromRoom(ctx, sub)
 
-	userIDUuid, err := uuid.Parse(userID)
-	if err != nil {
-		log.Printf("Invalid userID %s: %v\n", userID, err)
-		conn.WriteJSON(map[string]interface{}{
-			"type":    "error",
-			"message": "Invalid user ID",
-		})
-		return
-	}
+	go s.readFromClient(ctx, conn, roomID, userID, user)
 
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		log.Printf("Error fetching user %s, creating temporary user: %v\n", userID, err)
-
-		user = &models.User{
-			ID:     userIDUuid,
-			Name:   "Anonymous",
-			ImgUrl: "https://via.placeholder.com/150",
-		}
-		if err := s.userRepo.CreateUser(ctx, user); err != nil {
-			log.Printf("Error creating temporary user %s: %v\n", userID, err)
-			conn.WriteJSON(map[string]interface{}{
-				"type":    "error",
-				"message": "Failed to create user profile",
-			})
-			return
-		}
-	}
-
-	log.Printf("User %s (%s) has joined room %s\n", userID, user.Name, roomID)
-
-	joinMessage := map[string]interface{}{
-		"type": "user-joined",
-		"user": map[string]interface{}{
-			"id":     user.ID,
-			"name":   user.Name,
-			"imgUrl": user.ImgUrl,
-		},
-	}
-	if err := s.roomRepo.PublishMessage(ctx, roomID, joinMessage); err != nil {
-		log.Printf("Error publishing join message for user %s: %v\n", userID, err)
-	}
-
-	go s.handleIncomingMessages(ctx, conn, roomID, userID, user)
-
-	for msg := range subscription.Channel {
-		var payload map[string]interface{}
-		if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
-			log.Printf("Error unmarshaling message in room %s: %v\n", roomID, err)
+	for msg := range sub.Channel {
+		var pl map[string]interface{}
+		if err := json.Unmarshal([]byte(msg.Payload), &pl); err != nil {
 			continue
 		}
-
-		if sender, ok := payload["sender"].(string); ok && sender == userID {
-			continue
-		}
-
-		if err := conn.WriteJSON(payload); err != nil {
-			log.Printf("Error sending message to user %s: %v\n", userID, err)
-			break
-		}
+		log.Printf("[ROOM %s] relay => %s : %+v", roomID, userID, pl)
+		_ = conn.WriteJSON(pl)
 	}
 
-	leaveMessage := map[string]interface{}{
-		"type": "user-left",
-		"user": map[string]interface{}{
-			"id":    user.ID,
-			"name":  user.Name,
-			"photo": user.ImgUrl,
-		},
-	}
-	if err := s.roomRepo.PublishMessage(ctx, roomID, leaveMessage); err != nil {
-		log.Printf("Error publishing leave message for user %s: %v\n", userID, err)
-	}
-
-	log.Printf("User %s (%s) has left room %s\n", userID, user.Name, roomID)
+	leave := fiberMap(
+		"type", "user-left",
+		"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
+		"sender", userID,
+	)
+	_ = s.roomRepo.PublishMessage(ctx, roomID, leave)
+	log.Printf("[ROOM %s] broadcast user-left: %+v", roomID, leave)
 }
 
-func (s *WebSocketService) handleIncomingMessages(ctx context.Context, conn *websocket.Conn, roomID, userID string, user *models.User) {
+func (s *WebSocketService) readFromClient(
+	ctx context.Context,
+	conn *websocket.Conn,
+	roomID, userID string,
+	user *models.User,
+) {
 	for {
-		mt, msg, err := conn.ReadMessage()
+		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket read error for user %s: %v\n", userID, err)
+				log.Printf("read error %s: %v", userID, err)
 			}
 			break
 		}
+		if mt != websocket.TextMessage {
+			continue
+		}
 
-		if mt == websocket.TextMessage {
-			var payload map[string]interface{}
-			if err := json.Unmarshal(msg, &payload); err != nil {
-				log.Printf("Error unmarshaling message from user %s: %v\n", userID, err)
-				continue
-			}
+		var pl map[string]interface{}
+		if err := json.Unmarshal(data, &pl); err != nil {
+			log.Printf("json parse from %s: %v", userID, err)
+			continue
+		}
 
-			switch payload["type"] {
-			case "chat-message":
-				log.Printf("User %s sent a chat message in room %s\n", userID, roomID)
-
-				chatMessage := map[string]interface{}{
-					"id":   time.Now().UnixNano(),
-					"text": payload["text"],
-					"time": time.Now().Format(time.RFC3339),
-					"user": map[string]interface{}{
-						"id":    user.ID,
-						"name":  user.Name,
-						"photo": user.ImgUrl,
-					},
-				}
-
-				if err := s.roomRepo.PublishMessage(ctx, roomID, map[string]interface{}{
-					"type":    "chat-message",
-					"message": chatMessage,
-					"sender":  userID,
-				}); err != nil {
-					log.Printf("Error publishing chat message: %v\n", err)
-				}
-
-			case "offer", "answer", "ice-candidate":
-				if to, ok := payload["to"].(string); ok {
-					s.mutex.RLock()
-					recipientConn, exists := s.connections[roomID][to]
-					s.mutex.RUnlock()
-
-					if exists {
-						log.Printf("Forwarding %s message from user %s to user %s\n", payload["type"], userID, to)
-						if err := recipientConn.WriteJSON(payload); err != nil {
-							log.Printf("Error forwarding message to user %s: %v\n", to, err)
-						}
-					} else {
-						log.Printf("Recipient %s not found in room %s\n", to, roomID)
-					}
-				}
-			}
+		switch pl["type"] {
+		case "chat-message":
+			s.handleChat(ctx, roomID, userID, pl)
+		case "offer", "answer", "ice-candidate":
+			s.forwardSDP(roomID, userID, pl)
 		}
 	}
+}
+
+func (s *WebSocketService) handleChat(ctx context.Context, roomID, userID string, in map[string]interface{}) {
+	msg := in
+	if inner, ok := in["message"].(map[string]interface{}); ok {
+		msg = inner
+	}
+	payload := fiberMap(
+		"type", "chat-message",
+		"id", msg["id"], "text", msg["text"], "time", msg["time"], "user", msg["user"],
+		"sender", userID,
+	)
+	log.Printf("[ROOM %s] chat by %s -> %q", roomID, userID, payload["text"])
+	_ = s.roomRepo.PublishMessage(ctx, roomID, payload)
+}
+
+func (s *WebSocketService) forwardSDP(roomID, from string, pl map[string]interface{}) {
+	to, ok := pl["to"].(string)
+	if !ok {
+		return
+	}
+	s.mutex.RLock()
+	target, exists := s.connections[roomID][to]
+	s.mutex.RUnlock()
+	if !exists {
+		return
+	}
+	pl["from"] = from
+	log.Printf("[ROOM %s] %s → %s (%s)", roomID, from, to, pl["type"])
+	_ = target.WriteJSON(pl)
+}
+
+func (s *WebSocketService) ensureUser(ctx context.Context, uid string) *models.User {
+	if u, err := s.userRepo.GetUserByID(ctx, uid); err == nil {
+		return u
+	}
+	parsed, _ := uuid.Parse(uid)
+	u := &models.User{ID: parsed, Name: "Anonymous", ImgUrl: "https://via.placeholder.com/150"}
+	_ = s.userRepo.CreateUser(ctx, u)
+	return u
+}
+
+func (s *WebSocketService) cleanupConnection(ctx context.Context, roomID, uid string) {
+	s.mutex.Lock()
+	delete(s.connections[roomID], uid)
+	if len(s.connections[roomID]) == 0 {
+		delete(s.connections, roomID)
+	}
+	s.mutex.Unlock()
+	log.Printf("[ROOM %s] socket closed %s", roomID, uid)
+	_ = s.roomRepo.RemoveParticipant(ctx, roomID, uid)
+}
+
+func fiberMap(kv ...interface{}) map[string]interface{} {
+	m := make(map[string]interface{}, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i].(string)] = kv[i+1]
+	}
+	return m
 }
 
 func (s *WebSocketService) CanJoinRoom(ctx context.Context, roomID string) (bool, error) {
