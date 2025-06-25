@@ -3,8 +3,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
 	"sync"
 	"video-conference/models"
@@ -44,13 +42,13 @@ func (s *WebSocketService) HandleConnection(
 		s.connections[roomID] = make(map[string]*websocket.Conn)
 	}
 	s.connections[roomID][userID] = conn
-	count := len(s.connections[roomID])
+	peerCount := len(s.connections[roomID])
 	s.mutex.Unlock()
 
-	log.Printf("[ROOM %s] new socket %s (peers=%d)", roomID, userID, count)
+	log.Printf("[ROOM %s] new socket %s (peers=%d)", roomID, userID, peerCount)
 	defer s.cleanupConnection(ctx, roomID, userID)
 
-	if count > s.maxConnections {
+	if peerCount > s.maxConnections {
 		_ = conn.WriteJSON(fiberMap("error", "room full"))
 		conn.Close()
 		return
@@ -63,13 +61,15 @@ func (s *WebSocketService) HandleConnection(
 
 	user := s.ensureUser(ctx, userID)
 
-	joinPayload := fiberMap(
-		"type", "user-joined",
-		"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
-		"sender", userID,
-	)
-	_ = s.roomRepo.PublishMessage(ctx, roomID, joinPayload)
-	log.Printf("[ROOM %s] broadcast user-joined: %+v", roomID, joinPayload)
+	if peerCount == 1 {
+		join := fiberMap(
+			"type", "user-joined",
+			"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
+			"sender", userID,
+		)
+		_ = s.roomRepo.PublishMessage(ctx, roomID, join)
+		log.Printf("[ROOM %s] broadcast user-joined: %+v", roomID, join)
+	}
 
 	sub, err := s.roomRepo.SubscribeToRoom(ctx, roomID)
 	if err != nil {
@@ -81,8 +81,11 @@ func (s *WebSocketService) HandleConnection(
 	go s.readFromClient(ctx, conn, roomID, userID, user)
 
 	for msg := range sub.Channel {
-		var pl map[string]interface{}
-		if err := json.Unmarshal([]byte(msg.Payload), &pl); err != nil {
+		var pl map[string]any
+		if json.Unmarshal([]byte(msg.Payload), &pl) != nil {
+			continue
+		}
+		if snd, ok := pl["sender"].(string); ok && snd == userID {
 			continue
 		}
 		log.Printf("[ROOM %s] relay => %s : %+v", roomID, userID, pl)
@@ -105,7 +108,7 @@ func (s *WebSocketService) readFromClient(
 	user *models.User,
 ) {
 	for {
-		mt, data, err := conn.ReadMessage()
+		mt, raw, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("read error %s: %v", userID, err)
@@ -116,9 +119,8 @@ func (s *WebSocketService) readFromClient(
 			continue
 		}
 
-		var pl map[string]interface{}
-		if err := json.Unmarshal(data, &pl); err != nil {
-			log.Printf("json parse from %s: %v", userID, err)
+		var pl map[string]any
+		if json.Unmarshal(raw, &pl) != nil {
 			continue
 		}
 
@@ -131,9 +133,9 @@ func (s *WebSocketService) readFromClient(
 	}
 }
 
-func (s *WebSocketService) handleChat(ctx context.Context, roomID, userID string, in map[string]interface{}) {
+func (s *WebSocketService) handleChat(ctx context.Context, roomID, userID string, in map[string]any) {
 	msg := in
-	if inner, ok := in["message"].(map[string]interface{}); ok {
+	if inner, ok := in["message"].(map[string]any); ok {
 		msg = inner
 	}
 	payload := fiberMap(
@@ -145,7 +147,7 @@ func (s *WebSocketService) handleChat(ctx context.Context, roomID, userID string
 	_ = s.roomRepo.PublishMessage(ctx, roomID, payload)
 }
 
-func (s *WebSocketService) forwardSDP(roomID, from string, pl map[string]interface{}) {
+func (s *WebSocketService) forwardSDP(roomID, from string, pl map[string]any) {
 	to, ok := pl["to"].(string)
 	if !ok {
 		return
@@ -157,6 +159,7 @@ func (s *WebSocketService) forwardSDP(roomID, from string, pl map[string]interfa
 		return
 	}
 	pl["from"] = from
+	pl["sender"] = from
 	log.Printf("[ROOM %s] %s → %s (%s)", roomID, from, to, pl["type"])
 	_ = target.WriteJSON(pl)
 }
@@ -182,66 +185,10 @@ func (s *WebSocketService) cleanupConnection(ctx context.Context, roomID, uid st
 	_ = s.roomRepo.RemoveParticipant(ctx, roomID, uid)
 }
 
-func fiberMap(kv ...interface{}) map[string]interface{} {
-	m := make(map[string]interface{}, len(kv)/2)
+func fiberMap(kv ...any) map[string]any {
+	m := make(map[string]any, len(kv)/2)
 	for i := 0; i+1 < len(kv); i += 2 {
 		m[kv[i].(string)] = kv[i+1]
 	}
 	return m
-}
-
-func (s *WebSocketService) CanJoinRoom(ctx context.Context, roomID string) (bool, error) {
-	room, err := s.roomRepo.GetRoom(ctx, roomID)
-	if err != nil {
-		return false, fmt.Errorf("error fetching room: %w", err)
-	}
-
-	if !room.IsActive {
-		return false, errors.New("room is not active")
-	}
-
-	participants, err := s.roomRepo.GetParticipants(ctx, roomID)
-	if err != nil {
-		return false, fmt.Errorf("error fetching participants: %w", err)
-	}
-
-	if len(participants) >= room.MaxParticipants {
-		return false, errors.New("room is full")
-	}
-
-	return true, nil
-}
-
-func (s *WebSocketService) NotifyUserJoined(ctx context.Context, roomID string, userID string) error {
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("error fetching user: %w", err)
-	}
-
-	payload := map[string]interface{}{
-		"type": "user-joined",
-		"user": map[string]interface{}{
-			"id":     user.ID,
-			"name":   user.Name,
-			"imgUrl": user.ImgUrl,
-		},
-	}
-	return s.roomRepo.PublishMessage(ctx, roomID, payload)
-}
-
-func (s *WebSocketService) NotifyUserLeft(ctx context.Context, roomID string, userID string) error {
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("error fetching user: %w", err)
-	}
-
-	payload := map[string]interface{}{
-		"type": "user-left",
-		"user": map[string]interface{}{
-			"id":    user.ID,
-			"name":  user.Name,
-			"photo": user.ImgUrl,
-		},
-	}
-	return s.roomRepo.PublishMessage(ctx, roomID, payload)
 }

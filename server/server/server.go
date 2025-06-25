@@ -36,7 +36,14 @@ func New(cfg *config.Config, auth *services.AuthService,
 	userRepo *repositories.UserRepository) *Server {
 
 	app := fiber.New(fiber.Config{ErrorHandler: utils.GlobalErrorHandler})
-	return &Server{app: app, cfg: cfg, authSvc: auth, wsSvc: ws, roomRepo: roomRepo, userRepo: userRepo}
+	return &Server{
+		app:      app,
+		cfg:      cfg,
+		authSvc:  auth,
+		wsSvc:    ws,
+		roomRepo: roomRepo,
+		userRepo: userRepo,
+	}
 }
 
 func (s *Server) SetupMiddleware() {
@@ -125,9 +132,12 @@ func (s *Server) authenticateWS(c *fiber.Ctx) error {
 		log.Printf("[AUTH] missing token -> 401")
 		return fiber.ErrUnauthorized
 	}
+
 	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
 		token = strings.TrimSpace(token[7:])
 	}
+
+	log.Printf("[AUTH] token received: %s", token)
 
 	claims, err := s.authSvc.ValidateToken(token)
 	if err != nil {
@@ -176,7 +186,11 @@ func (s *Server) handleWebSocket(c *websocket.Conn) {
 	var list []fiber.Map
 	for _, pid := range participants {
 		if u, _ := s.userRepo.GetUserByID(ctx, pid); u != nil {
-			list = append(list, fiber.Map{"id": u.ID, "name": u.Name, "imgUrl": u.ImgUrl})
+			list = append(list, fiber.Map{
+				"id":     u.ID,
+				"name":   u.Name,
+				"imgUrl": u.ImgUrl,
+			})
 		}
 	}
 	_ = c.WriteJSON(fiber.Map{"type": "users-list", "users": list})
@@ -185,7 +199,7 @@ func (s *Server) handleWebSocket(c *websocket.Conn) {
 }
 
 func (s *Server) healthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.3"})
+	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.4"})
 }
 
 func (s *Server) Start() {

@@ -3,15 +3,25 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { useVideoConference } from "../../Hooks/websocket";
 
-const accessToken =
-  localStorage.getItem("access_token") || import.meta.env.VITE_ACCESS_TOKEN;
+const params = new URLSearchParams(window.location.search);
 
-const userIDEnv = import.meta.env.VITE_USER_ID || undefined;
-const userName = import.meta.env.VITE_USER_NAME || "anonymous";
+// 1️⃣ read the build-time env
+const envToken = import.meta.env.VITE_ACCESS_TOKEN as string | undefined;
+// 2️⃣ prefer the env token if it is non-empty, otherwise the stored one
+const accessToken = envToken?.trim()
+  ? envToken
+  : (localStorage.getItem("access_token") ?? "");
+
+const userIDEnv =
+  params.get("uid") || import.meta.env.VITE_USER_ID || undefined;
+const userName =
+  params.get("name") || import.meta.env.VITE_USER_NAME || "anonymous";
 const userPhoto =
-  import.meta.env.VITE_USER_PHOTO || "https://via.placeholder.com/40";
+  params.get("photo") ||
+  import.meta.env.VITE_USER_PHOTO ||
+  "https://via.placeholder.com/40";
 
-const roomID = "550e8400-e29b-41d4-a716-446655440000";
+const roomID = params.get("room") || "550e8400-e29b-41d4-a716-446655440000";
 
 export const ChatWindow = () => {
   const [newMessage, setNewMessage] = useState("");
@@ -23,24 +33,23 @@ export const ChatWindow = () => {
     userIDEnv,
     userName,
     userPhoto,
-    accessToken,
+    accessToken ?? "",
   );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  const handleSend = (messageText: string) => {
-    if (messageText.trim()) {
-      sendChatMessage(messageText);
+  const handleSend = (txt: string) => {
+    if (txt.trim()) {
+      sendChatMessage(txt);
       setNewMessage("");
       setShowEmojiPicker(false);
     }
   };
 
-  const handleEmojiClick = (emojiObject: { emoji: string }) => {
-    setNewMessage((prev) => prev + emojiObject.emoji);
-  };
+  const handleEmojiClick = (e: { emoji: string }) =>
+    setNewMessage((p) => p + e.emoji);
 
   return (
     <div className="flex flex-col h-[520px] w-80 bg-white rounded-lg overflow-hidden">
