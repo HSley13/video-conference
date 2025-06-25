@@ -4,6 +4,7 @@ import { Message } from "../Types/types";
 import { FormatTime } from "../Utils/utils";
 import { v4 as uuidv4 } from "uuid";
 
+/* ---------- helper: decode {sub} claim from JWT ---------- */
 const getSubFromJWT = (jwt: string): string | null => {
   try {
     const [, payload] = jwt.split(".");
@@ -20,7 +21,9 @@ export const useVideoConference = (
   userPhoto: string,
   accessToken: string,
 ) => {
+  /* derive the authoritative userID */
   const userID = userIDInput ?? getSubFromJWT(accessToken) ?? "";
+
   const { localStream, addRemoteStream, removeRemoteStream, setUsers } =
     useWebRTC();
 
@@ -28,8 +31,9 @@ export const useVideoConference = (
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
 
+  /* --------------------------- lifecycle --------------------------- */
   useEffect(() => {
-    if (!userID || !accessToken) return;
+    if (!userID || !accessToken) return; // wait until we know who we are
 
     const connect = () => {
       wsRef.current = new WebSocket(
@@ -43,9 +47,13 @@ export const useVideoConference = (
         const msg = JSON.parse(ev.data);
 
         switch (msg.type) {
-          case "users-list":
+          /* ---------- initial participant list ---------- */
+          case "users-list": {
+            /* ① exclude myself from the list */
+            const peers = msg.users.filter((u: any) => u.id !== userID);
+
             setUsers(
-              msg.users.map((u: any) => ({
+              peers.map((u: any) => ({
                 id: u.id,
                 name: u.name,
                 imgUrl: u.imgUrl,
@@ -55,11 +63,12 @@ export const useVideoConference = (
                 videoStream: null,
               })),
             );
-            msg.users.forEach((u: any) => {
-              if (u.id !== userID) initiateWebRTC(u.id);
-            });
-            break;
 
+            peers.forEach((u: any) => initiateWebRTC(u.id)); // connect only to others
+            break;
+          }
+
+          /* ---------- someone else joined ---------- */
           case "user-joined":
             if (msg.userID !== userID) {
               setUsers((prev) => [
@@ -78,24 +87,28 @@ export const useVideoConference = (
             }
             break;
 
+          /* ---------- someone left ---------- */
           case "user-left":
             setUsers((prev) => prev.filter((u) => u.id !== msg.userID));
             removeRemoteStream(msg.userID);
             closePeer(msg.userID);
             break;
 
+          /* ---------- WebRTC signalling ---------- */
           case "offer":
-            await handleOffer(msg.offer, msg.from);
+            if (msg.from !== userID) await handleOffer(msg.offer, msg.from);
             break;
 
           case "answer":
-            await handleAnswer(msg.answer, msg.from);
+            if (msg.from !== userID) await handleAnswer(msg.answer, msg.from);
             break;
 
           case "ice-candidate":
-            await handleCandidate(msg.candidate, msg.from);
+            if (msg.from !== userID)
+              await handleCandidate(msg.candidate, msg.from);
             break;
 
+          /* ---------- chat ---------- */
           case "chat-message":
             setChatMessages((p) => [
               ...p,
@@ -127,6 +140,7 @@ export const useVideoConference = (
     };
   }, [roomID, userID, accessToken]);
 
+  /* ----------------------- chat sender ----------------------- */
   const sendChatMessage = (text: string) => {
     if (!wsRef.current) return;
     const message: Message = {
@@ -138,7 +152,9 @@ export const useVideoConference = (
     wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
   };
 
+  /* ------------------- WebRTC helpers ------------------- */
   const initiateWebRTC = async (remoteID: string) => {
+    if (remoteID === userID) return; // ② never connect to myself
     if (peerConnections.current[remoteID]) return;
 
     const pc = new RTCPeerConnection({
@@ -155,12 +171,15 @@ export const useVideoConference = (
           type: "ice-candidate",
           candidate: ev.candidate,
           to: remoteID,
+          from: userID,
         }),
       );
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    wsRef.current?.send(JSON.stringify({ type: "offer", offer, to: remoteID }));
+    wsRef.current?.send(
+      JSON.stringify({ type: "offer", offer, to: remoteID, from: userID }),
+    );
 
     peerConnections.current[remoteID] = pc;
   };
@@ -169,7 +188,9 @@ export const useVideoConference = (
     offer: RTCSessionDescriptionInit,
     remoteID: string,
   ) => {
+    if (remoteID === userID) return;
     if (peerConnections.current[remoteID]) return;
+
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -183,6 +204,7 @@ export const useVideoConference = (
           type: "ice-candidate",
           candidate: ev.candidate,
           to: remoteID,
+          from: userID,
         }),
       );
 
@@ -190,7 +212,7 @@ export const useVideoConference = (
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     wsRef.current?.send(
-      JSON.stringify({ type: "answer", answer, to: remoteID }),
+      JSON.stringify({ type: "answer", answer, to: remoteID, from: userID }),
     );
 
     peerConnections.current[remoteID] = pc;
@@ -200,6 +222,7 @@ export const useVideoConference = (
     answer: RTCSessionDescriptionInit,
     remoteID: string,
   ) => {
+    if (remoteID === userID) return;
     await peerConnections.current[remoteID]?.setRemoteDescription(answer);
   };
 
@@ -207,6 +230,7 @@ export const useVideoConference = (
     cand: RTCIceCandidateInit,
     remoteID: string,
   ) => {
+    if (remoteID === userID) return;
     await peerConnections.current[remoteID]?.addIceCandidate(
       new RTCIceCandidate(cand),
     );
