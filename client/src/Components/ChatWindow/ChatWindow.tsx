@@ -5,9 +5,7 @@ import { useVideoConference } from "../../Hooks/websocket";
 
 const params = new URLSearchParams(window.location.search);
 
-// 1️⃣ read the build-time env
 const envToken = import.meta.env.VITE_ACCESS_TOKEN as string | undefined;
-// 2️⃣ prefer the env token if it is non-empty, otherwise the stored one
 const accessToken = envToken?.trim()
   ? envToken
   : (localStorage.getItem("access_token") ?? "");
@@ -28,7 +26,7 @@ export const ChatWindow = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { chatMessages, sendChatMessage } = useVideoConference(
+  const { messages, sendChatMessage } = useVideoConference(
     roomID,
     userIDEnv,
     userName,
@@ -38,7 +36,7 @@ export const ChatWindow = () => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+  }, [messages]);
 
   const handleSend = (txt: string) => {
     if (txt.trim()) {
@@ -56,7 +54,7 @@ export const ChatWindow = () => {
       <h3 className="text-lg font-semibold m-2">Chat</h3>
 
       <div className="flex-1 overflow-y-auto rounded-t-lg p-2 bg-gray-200">
-        {chatMessages.map((m) => (
+        {messages.map((m) => (
           <MessageBubble
             key={m.id}
             message={m}
