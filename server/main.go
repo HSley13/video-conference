@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"github.com/go-redis/redis/v8"
@@ -14,24 +15,26 @@ import (
 )
 
 func main() {
-	/* -------------------- env / config -------------------- */
 	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: .env file not found")
+		log.Println("warning: .env file not found – falling back to shell env")
 	}
 	cfg := config.Load()
 
-	/* -------------------- database ------------------------ */
 	db := db_aws.InitDb(cfg.PostgresDSN)
 
-	/* -------------------- redis --------------------------- */
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("Failed to parse Redis URL: %v", err)
+		log.Fatalf("redis ParseURL: %v", err)
 	}
 	redisClient := redis.NewClient(redisOpts)
 	defer redisClient.Close()
 
-	/* ---------------- repositories / services ------------- */
+	ctx := context.Background()
+	if err := redisClient.FlushDB(ctx).Err(); err != nil {
+		log.Fatalf("redis FlushDB: %v", err)
+	}
+	log.Println("redis: database flushed")
+
 	userRepo := repositories.NewUserRepository(db)
 	roomRepo := repositories.NewRoomRepository(redisClient, db)
 
@@ -43,7 +46,6 @@ func main() {
 		cfg.MaxConnections,
 	)
 
-	/* -------------------- server -------------------------- */
 	srv := server.New(cfg, authSvc, wsSvc, roomRepo, userRepo)
 	srv.Start()
 }

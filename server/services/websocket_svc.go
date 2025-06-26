@@ -61,15 +61,13 @@ func (s *WebSocketService) HandleConnection(
 
 	user := s.ensureUser(ctx, userID)
 
-	if peerCount == 1 {
-		join := fiberMap(
-			"type", "user-joined",
-			"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
-			"sender", userID,
-		)
-		_ = s.roomRepo.PublishMessage(ctx, roomID, join)
-		log.Printf("[ROOM %s] broadcast user-joined: %+v", roomID, join)
-	}
+	join := fiberMap(
+		"type", "user-joined",
+		"userID", user.ID, "userName", user.Name, "userPhoto", user.ImgUrl,
+		"sender", userID,
+	)
+	_ = s.roomRepo.PublishMessage(ctx, roomID, join)
+	log.Printf("[ROOM %s] broadcast user-joined: %+v", roomID, join)
 
 	sub, err := s.roomRepo.SubscribeToRoom(ctx, roomID)
 	if err != nil {
