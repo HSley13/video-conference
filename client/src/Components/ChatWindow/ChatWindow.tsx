@@ -51,7 +51,7 @@ export const ChatWindow = () => {
 
   return (
     <div className="flex flex-col h-[520px] w-80 bg-white rounded-lg overflow-hidden">
-      <h3 className="text-lg font-semibold m-2">Chat</h3>
+      <h3 className="text-lg fjnt-semibold m-2">Chat</h3>
 
       <div className="flex-1 overflow-y-auto rounded-t-lg p-2 bg-gray-200">
         {messages.map((m) => (

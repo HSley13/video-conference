@@ -5,7 +5,7 @@ import { ChevronRight, ChevronLeft, Users, MessageCircle } from "lucide-react";
 import { VideoList } from "./VideoList";
 import { Row, Col, Button } from "react-bootstrap";
 
-export const MainWindow = () => {
+export const VideoWindow = () => {
   const [showParticipants, setShowParticipants] = useState(false);
   const [showChat, setShowChat] = useState(false);
 

@@ -3,20 +3,22 @@ import { Home, Settings } from "lucide-react";
 import { useState } from "react";
 import { Button } from "react-bootstrap";
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export const SideBar = () => {
   const [selectedItem, setSelectedItem] = useState("Home");
+  const navigate = useNavigate();
 
   const items = [
     {
       name: "Home",
       Icon: Home,
-      action: () => console.log("Navigating to home..."),
+      action: () => navigate("/"),
     },
     {
       name: "Settings",
       Icon: Settings,
-      action: () => console.log("Navigating to settings..."),
+      action: () => navigate("/settings"),
     },
   ];
 
@@ -30,7 +32,7 @@ export const SideBar = () => {
     <aside className="border-r-3 bg-gray-400 border-gray-200 h-full flex flex-col ">
       <div className="flex flex-col m-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         <div className="border-b-2 border-gray-800 p-2 m-2 flex flex-col items-center">
-          <Link to="/" className="flex flex-col items-center w-full">
+          <Link to="/profile" className="flex flex-col items-center w-full">
             <Button className="bg-transparent p-0 border-0 flex flex-col items-center">
               <img
                 src="https://img.posterstore.com/zoom/wb0125-8batman-portrait50x70-34329-40892.jpg"
