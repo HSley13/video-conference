@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
 	"video-conference/config"
 	"video-conference/models"
 	"video-conference/repositories"
@@ -31,32 +32,40 @@ type Server struct {
 	userRepo *repositories.UserRepository
 }
 
-func New(cfg *config.Config, auth *services.AuthService,
-	ws *services.WebSocketService, roomRepo *repositories.RoomRepository,
-	userRepo *repositories.UserRepository) *Server {
+func New(
+	cfg *config.Config,
+	auth *services.AuthService,
+	ws *services.WebSocketService,
+	room *repositories.RoomRepository,
+	user *repositories.UserRepository,
+) *Server {
+	app := fiber.New(fiber.Config{
+		ErrorHandler: utils.GlobalErrorHandler,
+	})
 
-	app := fiber.New(fiber.Config{ErrorHandler: utils.GlobalErrorHandler})
 	return &Server{
 		app:      app,
 		cfg:      cfg,
 		authSvc:  auth,
 		wsSvc:    ws,
-		roomRepo: roomRepo,
-		userRepo: userRepo,
+		roomRepo: room,
+		userRepo: user,
 	}
 }
 
 func (s *Server) SetupMiddleware() {
 	s.app.Use(recover.New())
+
 	s.app.Use(cors.New(cors.Config{
 		AllowOrigins:     strings.Join(s.cfg.AllowedOrigins, ","),
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,
 	}))
+
 	s.app.Use(logger.New(logger.Config{
 		TimeFormat: time.RFC3339,
-		Format:     "[${time}] ${status} - ${latency} ${method} ${path}\n",
+		Format:     "[${time}] ${status} – ${latency} ${method} ${path}\n",
 	}))
 }
 
@@ -68,8 +77,7 @@ func (s *Server) SetupRoutes() {
 	auth.Post("/login", s.handleLogin)
 	auth.Post("/refresh", s.handleRefreshToken)
 
-	ws := api.Group("/ws")
-	ws.Use(s.authenticateWS)
+	ws := api.Group("/ws", s.authenticateWS)
 	ws.Get("/:roomID/:userID", websocket.New(s.handleWebSocket))
 
 	api.Get("/health", s.healthCheck)
@@ -78,26 +86,30 @@ func (s *Server) SetupRoutes() {
 func (s *Server) handleRegister(c *fiber.Ctx) error {
 	var req struct{ Email, Password string }
 	if err := c.BodyParser(&req); err != nil {
-		return utils.RespondWithError(c, fiber.StatusBadRequest, "Invalid body")
+		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
+
 	user, err := s.authSvc.Register(c.Context(), req.Email, req.Password)
 	if err != nil {
-		return utils.RespondWithError(c, fiber.StatusConflict, "Registration failed")
+		return utils.RespondWithError(c, fiber.StatusConflict, "registration failed")
 	}
-	log.Printf("REGISTER ok -> %s", user.Email)
+
+	log.Printf("[AUTH] register → %s", user.Email)
 	return c.Status(fiber.StatusCreated).JSON(utils.SuccessResponse(user))
 }
 
 func (s *Server) handleLogin(c *fiber.Ctx) error {
 	var req struct{ Email, Password string }
 	if err := c.BodyParser(&req); err != nil {
-		return utils.RespondWithError(c, fiber.StatusBadRequest, "Invalid body")
+		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
+
 	access, refresh, err := s.authSvc.Login(c.Context(), req.Email, req.Password)
 	if err != nil {
-		return utils.RespondWithError(c, fiber.StatusUnauthorized, "Invalid credentials")
+		return utils.RespondWithError(c, fiber.StatusUnauthorized, "invalid credentials")
 	}
-	log.Printf("LOGIN ok -> %s", req.Email)
+
+	log.Printf("[AUTH] login → %s", req.Email)
 	return c.JSON(utils.SuccessResponse(fiber.Map{
 		"access_token":  access,
 		"refresh_token": refresh,
@@ -107,13 +119,15 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 func (s *Server) handleRefreshToken(c *fiber.Ctx) error {
 	var req struct{ RefreshToken string }
 	if err := c.BodyParser(&req); err != nil {
-		return utils.RespondWithError(c, fiber.StatusBadRequest, "Invalid body")
+		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
-	newAcc, err := s.authSvc.RefreshToken(c.Context(), req.RefreshToken)
+
+	access, err := s.authSvc.RefreshToken(c.Context(), req.RefreshToken)
 	if err != nil {
-		return utils.RespondWithError(c, fiber.StatusUnauthorized, "Token refresh failed")
+		return utils.RespondWithError(c, fiber.StatusUnauthorized, "token refresh failed")
 	}
-	return c.JSON(utils.SuccessResponse(fiber.Map{"access_token": newAcc}))
+
+	return c.JSON(utils.SuccessResponse(fiber.Map{"access_token": access}))
 }
 
 func (s *Server) authenticateWS(c *fiber.Ctx) error {
@@ -129,7 +143,7 @@ func (s *Server) authenticateWS(c *fiber.Ctx) error {
 		token = c.Query("access_token")
 	}
 	if token == "" {
-		log.Printf("[AUTH] missing token -> 401")
+		log.Print("[WS-AUTH] missing token")
 		return fiber.ErrUnauthorized
 	}
 
@@ -137,44 +151,49 @@ func (s *Server) authenticateWS(c *fiber.Ctx) error {
 		token = strings.TrimSpace(token[7:])
 	}
 
-	log.Printf("[AUTH] token received: %s", token)
-
 	claims, err := s.authSvc.ValidateToken(token)
 	if err != nil {
-		log.Printf("[AUTH] invalid token -> 401 : %v", err)
+		log.Printf("[WS-AUTH] invalid token: %v", err)
 		return fiber.ErrUnauthorized
 	}
 
-	userID, ok := claims["sub"].(string)
-	if !ok || userID == "" {
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
 		return fiber.ErrUnauthorized
 	}
 
 	c.Locals("ctx", c.Context())
-	c.Locals("jwtUserID", userID)
+	c.Locals("jwtUserID", sub)
 	return c.Next()
 }
 
 func (s *Server) handleWebSocket(c *websocket.Conn) {
 	ctx := c.Locals("ctx").(context.Context)
-	userID := c.Locals("jwtUserID").(string)
+	jwtUser := c.Locals("jwtUserID").(string)
+	paramUID := c.Params("userID")
+	paramRID := c.Params("roomID")
 
-	paramUserID, _ := uuid.Parse(c.Params("userID"))
-	roomID, _ := uuid.Parse(c.Params("roomID"))
-
-	if paramUserID.String() != userID {
-		_ = c.WriteJSON(fiber.Map{"error": "user id mismatch"})
-		c.Close()
+	userUUID, err1 := uuid.Parse(paramUID)
+	roomUUID, err2 := uuid.Parse(paramRID)
+	if err1 != nil || err2 != nil {
+		_ = c.WriteJSON(fiber.Map{"error": "invalid roomId or userId"})
+		_ = c.Close()
 		return
 	}
 
-	log.Printf("[WS] handshake OK user=%s room=%s", userID, roomID)
+	if userUUID.String() != jwtUser {
+		_ = c.WriteJSON(fiber.Map{"error": "user id mismatch"})
+		_ = c.Close()
+		return
+	}
 
-	if _, err := s.roomRepo.GetRoom(ctx, roomID.String()); err != nil {
+	log.Printf("[WS] handshake OK user=%s room=%s", jwtUser, roomUUID)
+
+	if _, err := s.roomRepo.GetRoom(ctx, roomUUID.String()); err != nil {
 		_ = s.roomRepo.CreateRoom(ctx, &models.Room{
-			ID:              roomID,
-			Name:            "Room " + roomID.String()[:8],
-			OwnerID:         paramUserID,
+			ID:              roomUUID,
+			Name:            "Room " + roomUUID.String()[:8],
+			OwnerID:         userUUID,
 			MaxParticipants: 10,
 			IsActive:        true,
 			CreatedAt:       time.Now(),
@@ -182,46 +201,39 @@ func (s *Server) handleWebSocket(c *websocket.Conn) {
 		})
 	}
 
-	participants, _ := s.roomRepo.GetParticipants(ctx, roomID.String())
-	var list []fiber.Map
-	for _, pid := range participants {
-		if u, _ := s.userRepo.GetUserByID(ctx, pid); u != nil {
-			list = append(list, fiber.Map{
-				"id":     u.ID,
-				"name":   u.Name,
-				"imgUrl": u.ImgUrl,
-			})
+	ids, _ := s.roomRepo.GetParticipants(ctx, roomUUID.String())
+	list := make([]fiber.Map, 0, len(ids))
+	for _, id := range ids {
+		if u, _ := s.userRepo.GetUserByID(ctx, id); u != nil {
+			list = append(list, fiber.Map{"id": u.ID, "name": u.Name, "imgUrl": u.ImgUrl})
 		}
 	}
 	_ = c.WriteJSON(fiber.Map{"type": "users-list", "users": list})
 
-	s.wsSvc.HandleConnection(ctx, c, roomID.String(), paramUserID.String())
+	s.wsSvc.HandleConnection(ctx, c, roomUUID.String(), userUUID.String())
 }
 
 func (s *Server) healthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.4"})
+	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.5"})
 }
 
 func (s *Server) Start() {
 	s.SetupMiddleware()
 	s.SetupRoutes()
 
-	done := make(chan struct{})
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
-		sigint := make(chan os.Signal, 1)
-		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
-		<-sigint
-		log.Println("SIGTERM received – shutting down")
+		<-quit
+		log.Println("graceful shutdown…")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = s.app.ShutdownWithContext(ctx)
-		close(done)
 	}()
 
-	log.Printf("HTTP/WebSocket listening on :%s", s.cfg.Port)
+	log.Printf("HTTP/WS listening on :%s", s.cfg.Port)
 	if err := s.app.Listen(":" + s.cfg.Port); err != nil {
-		log.Fatalf("fiber.Listen failed: %v", err)
+		log.Fatalf("fiber.Listen: %v", err)
 	}
-	<-done
-	log.Println("Server exited")
 }

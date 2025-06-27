@@ -1,19 +1,15 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
+	"video-conference/db_aws"
 	"video-conference/models"
 	"video-conference/repositories"
 
 	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/crypto/argon2"
 )
 
 type AuthService struct {
@@ -26,7 +22,7 @@ func NewAuthService(repo *repositories.UserRepository, secret string) *AuthServi
 }
 
 func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
-	hash, err := HashPassword(password)
+	hash, err := db_aws.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +43,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
-	if err != nil || VerifyPassword(password, user.HashPassword) != nil {
+	if err != nil || db_aws.VerifyPassword(password, user.HashPassword) != nil {
 		return "", "", errors.New("invalid credentials")
 	}
 
@@ -109,59 +105,4 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 		return "", errors.New("invalid or expired session")
 	}
 	return s.generateAccessToken(userID)
-}
-
-const (
-	memory      = 64 * 1024
-	iterations  = 3
-	parallelism = 2
-	saltLength  = 16
-	keyLength   = 32
-)
-
-func GenerateRandomSalt(length int) (string, error) {
-	salt := make([]byte, length)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("failed to generate random salt: %v", err)
-	}
-	return base64.RawStdEncoding.EncodeToString(salt), nil
-}
-
-func HashPassword(password string) (string, error) {
-	salt, err := GenerateRandomSalt(saltLength)
-	if err != nil {
-		return "", err
-	}
-
-	hash := argon2.IDKey([]byte(password), []byte(salt), iterations, memory, uint8(parallelism), keyLength)
-
-	saltEncoded := base64.RawStdEncoding.EncodeToString([]byte(salt))
-	hashEncoded := base64.RawStdEncoding.EncodeToString(hash)
-
-	return fmt.Sprintf("%s$%s", saltEncoded, hashEncoded), nil
-}
-
-func VerifyPassword(password string, hashedPassword string) error {
-	parts := strings.Split(hashedPassword, "$")
-	if len(parts) != 2 {
-		return errors.New("invalid hashed password format")
-	}
-
-	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
-	if err != nil {
-		return errors.New("failed to decode salt")
-	}
-
-	storedHash, err := base64.RawStdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return errors.New("failed to decode stored hash")
-	}
-
-	computedHash := argon2.IDKey([]byte(password), salt, iterations, memory, uint8(parallelism), keyLength)
-
-	if !bytes.Equal(computedHash, storedHash) {
-		return errors.New("invalid password")
-	}
-
-	return nil
 }
