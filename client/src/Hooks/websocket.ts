@@ -9,43 +9,36 @@ interface WsUser {
   name: string;
   imgUrl: string;
 }
-
 interface UsersListMsg {
   type: "users-list";
   users: WsUser[];
 }
-
 interface UserJoinedMsg {
   type: "user-joined";
   userID: string;
   userName: string;
   userPhoto: string;
 }
-
 interface UserLeftMsg {
   type: "user-left";
   userID: string;
 }
-
 interface OfferMsg {
   type: "offer";
   from: string;
   offer: RTCSessionDescriptionInit;
 }
-
 interface AnswerMsg {
   type: "answer";
   from: string;
   answer: RTCSessionDescriptionInit;
 }
-
 interface IceCandidateMsg {
   type: "ice-candidate";
   from: string;
   candidate: RTCIceCandidateInit;
 }
-
-interface ChatMessageMsg {
+interface ChatMsg {
   type: "chat-message";
   id: string;
   text: string;
@@ -53,16 +46,16 @@ interface ChatMessageMsg {
   user: Pick<User, "id" | "name" | "photo">;
 }
 
-type IncomingWsMessage =
+type Incoming =
   | UsersListMsg
   | UserJoinedMsg
   | UserLeftMsg
   | OfferMsg
   | AnswerMsg
   | IceCandidateMsg
-  | ChatMessageMsg;
+  | ChatMsg;
 
-type OutgoingWsMessage =
+type Outgoing =
   | {
       type: "offer";
       offer: RTCSessionDescriptionInit;
@@ -83,202 +76,173 @@ type OutgoingWsMessage =
     }
   | { type: "chat-message"; message: Message };
 
-const extractSubFromJWT = (jwt: string): string | null => {
-  try {
-    const [, payload] = jwt.split(".");
-    return JSON.parse(atob(payload)).sub as string;
-  } catch {
-    return null;
-  }
-};
+export function useVideoConference() {
+  const {
+    roomId,
+    userInfo: { id: currentUid, firstName, imageUrl, accessToken },
+    localStream,
+    addRemoteStream,
+    removeRemoteStream,
+    setUsers,
+  } = useWebRTC();
 
-export const useVideoConference = (
-  roomId: string,
-  userIdProp: string | undefined,
-  userName: string,
-  userPhoto: string,
-  accessToken: string,
-) => {
-  const currentUserId = userIdProp ?? extractSubFromJWT(accessToken) ?? "";
-  const { localStream, addRemoteStream, removeRemoteStream, setUsers } =
-    useWebRTC();
   const socketRef = useRef<WebSocket | null>(null);
   const peersRef = useRef<Record<string, RTCPeerConnection>>({});
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const seenMessageIds = useRef<Set<string>>(new Set());
-  const knownUserIds = useRef<Set<string>>(new Set());
+  const seenMsgIds = useRef(new Set<string>());
+  const knownUserIds = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!currentUserId || !accessToken) return;
+    if (!currentUid || !accessToken) return;
 
     const url =
-      `ws://localhost:3002/video-conference/ws/${roomId}/${currentUserId}` +
+      `ws://localhost:3002/video-conference/ws/${roomId}/${currentUid}` +
       `?access_token=${encodeURIComponent(accessToken)}`;
 
-    function openSocket(): void {
+    const openSocket = () => {
       socketRef.current = new WebSocket(url);
 
-      socketRef.current.onmessage = async (ev) => {
-        const payload = JSON.parse(ev.data) as IncomingWsMessage;
-
-        switch (payload.type) {
-          case "users-list": {
-            const others = payload.users.filter((u) => u.id !== currentUserId);
-
-            knownUserIds.current = new Set(others.map((u) => u.id));
-
-            setUsers(
-              others.map<User>((u) => ({
-                id: u.id,
-                name: u.name,
-                imgUrl: u.imgUrl,
-                isAudioOn: true,
-                isVideoOn: true,
-                isPinned: false,
-                videoStream: null,
-              })),
-            );
-
-            others.forEach((u) => createPeer(u.id));
-            break;
-          }
-
-          case "user-joined": {
-            const id = payload.userID;
-            if (id !== currentUserId && !knownUserIds.current.has(id)) {
-              knownUserIds.current.add(id);
-              setUsers((prev) => [
-                ...prev,
-                {
-                  id,
-                  name: payload.userName,
-                  imgUrl: payload.userPhoto,
-                  isAudioOn: true,
-                  isVideoOn: true,
-                  isPinned: false,
-                  videoStream: null,
-                },
-              ]);
-              createPeer(id);
-            }
-            break;
-          }
-
-          case "user-left": {
-            const id = payload.userID;
-            knownUserIds.current.delete(id);
-            setUsers((prev) => prev.filter((u) => u.id !== id));
-            removeRemoteStream(id);
-            closePeer(id);
-            break;
-          }
-
-          case "offer":
-            if (payload.from !== currentUserId) {
-              await handleOffer(payload.offer, payload.from);
-            }
-            break;
-
-          case "answer":
-            if (payload.from !== currentUserId) {
-              await handleAnswer(payload.answer, payload.from);
-            }
-            break;
-
-          case "ice-candidate":
-            if (payload.from !== currentUserId) {
-              await handleCandidate(payload.candidate, payload.from);
-            }
-            break;
-
-          case "chat-message":
-            if (!seenMessageIds.current.has(payload.id)) {
-              seenMessageIds.current.add(payload.id);
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: payload.id,
-                  text: payload.text,
-                  time: payload.time,
-                  user: payload.user,
-                },
-              ]);
-            }
-            break;
-
-          default:
-            const _exhaustive: never = payload;
-            console.warn("[WS] unhandled message:", _exhaustive);
-        }
-      };
+      socketRef.current.onmessage = (e) =>
+        handleSocketMessage(JSON.parse(e.data) as Incoming);
 
       socketRef.current.onclose = () => {
-        console.warn("[WS] closed – reconnecting in 3 s…");
+        console.warn("[WS] closed – retry in 3s");
         setTimeout(openSocket, 3_000);
       };
-    }
+    };
 
     openSocket();
-
     return () => {
       socketRef.current?.close();
       Object.values(peersRef.current).forEach((pc) => pc.close());
     };
-  }, [roomId, currentUserId, accessToken, setUsers, removeRemoteStream]);
+  }, [roomId, currentUid, accessToken]);
 
-  const sendChatMessage = (text: string): void => {
+  const handleSocketMessage = async (msg: Incoming) => {
+    switch (msg.type) {
+      case "users-list": {
+        const others = msg.users.filter((u) => u.id !== currentUid);
+        knownUserIds.current = new Set(others.map((u) => u.id));
+        setUsers(
+          others.map<User>((u) => ({
+            id: u.id,
+            name: u.name,
+            imgUrl: u.imgUrl,
+            isAudioOn: true,
+            isVideoOn: true,
+            isPinned: false,
+            videoStream: null,
+          })),
+        );
+        others.forEach((u) => createPeer(u.id));
+        break;
+      }
+
+      case "user-joined": {
+        if (
+          msg.userID !== currentUid &&
+          !knownUserIds.current.has(msg.userID)
+        ) {
+          knownUserIds.current.add(msg.userID);
+          setUsers((prev) => [
+            ...prev,
+            {
+              id: msg.userID,
+              name: msg.userName,
+              imgUrl: msg.userPhoto,
+              isAudioOn: true,
+              isVideoOn: true,
+              isPinned: false,
+              videoStream: null,
+            },
+          ]);
+          createPeer(msg.userID);
+        }
+        break;
+      }
+
+      case "user-left":
+        knownUserIds.current.delete(msg.userID);
+        setUsers((prev) => prev.filter((u) => u.id !== msg.userID));
+        removeRemoteStream(msg.userID);
+        closePeer(msg.userID);
+        break;
+
+      case "offer":
+        if (msg.from !== currentUid) await handleOffer(msg.offer, msg.from);
+        break;
+      case "answer":
+        if (msg.from !== currentUid) await handleAnswer(msg.answer, msg.from);
+        break;
+      case "ice-candidate":
+        if (msg.from !== currentUid)
+          await handleCandidate(msg.candidate, msg.from);
+        break;
+
+      case "chat-message":
+        if (!seenMsgIds.current.has(msg.id)) {
+          seenMsgIds.current.add(msg.id);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: msg.id,
+              text: msg.text,
+              time: msg.time,
+              user: msg.user,
+            },
+          ]);
+        }
+        break;
+    }
+  };
+
+  const sendChatMessage = (text: string) => {
     if (!socketRef.current || !text.trim()) return;
-
     const msg: Message = {
       id: uuid(),
       text,
       time: FormatTime(new Date()),
-      user: { id: currentUserId, name: userName, photo: userPhoto },
+      user: { id: currentUid, name: firstName, photo: imageUrl },
     };
-
-    if (!seenMessageIds.current.has(msg.id)) {
-      seenMessageIds.current.add(msg.id);
-      setMessages((prev) => [...prev, msg]);
-    }
-
-    const outgoing: OutgoingWsMessage = { type: "chat-message", message: msg };
-    socketRef.current.send(JSON.stringify(outgoing));
+    seenMsgIds.current.add(msg.id);
+    setMessages((prev) => [...prev, msg]);
+    socketRef.current.send(
+      JSON.stringify({ type: "chat-message", message: msg } satisfies Outgoing),
+    );
   };
 
-  const createPeer = async (remoteId: string): Promise<void> => {
-    if (remoteId === currentUserId || peersRef.current[remoteId]) return;
+  const createPeer = async (remoteId: string) => {
+    if (remoteId === currentUid || peersRef.current[remoteId]) return;
 
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
+    localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
-    localStream
-      ?.getTracks()
-      .forEach((track) => pc.addTrack(track, localStream));
-
-    pc.ontrack = (ev) => addRemoteStream(remoteId, ev.streams[0]);
-
-    pc.onicecandidate = (ev) => {
-      if (ev.candidate && socketRef.current) {
-        const msg: OutgoingWsMessage = {
-          type: "ice-candidate",
-          candidate: ev.candidate,
-          to: remoteId,
-          from: currentUserId,
-        };
-        socketRef.current.send(JSON.stringify(msg));
+    pc.ontrack = (e) => addRemoteStream(remoteId, e.streams[0]);
+    pc.onicecandidate = (e) => {
+      if (e.candidate && socketRef.current) {
+        socketRef.current.send(
+          JSON.stringify({
+            type: "ice-candidate",
+            candidate: e.candidate,
+            to: remoteId,
+            from: currentUid,
+          } satisfies Outgoing),
+        );
       }
     };
 
     await pc.setLocalDescription(await pc.createOffer());
-
-    const offerMsg: OutgoingWsMessage = {
-      type: "offer",
-      offer: pc.localDescription!,
-      to: remoteId,
-      from: currentUserId,
-    };
-    socketRef.current?.send(JSON.stringify(offerMsg));
+    socketRef.current?.send(
+      JSON.stringify({
+        type: "offer",
+        offer: pc.localDescription!,
+        to: remoteId,
+        from: currentUid,
+      } satisfies Outgoing),
+    );
 
     peersRef.current[remoteId] = pc;
   };
@@ -286,40 +250,36 @@ export const useVideoConference = (
   const handleOffer = async (
     offer: RTCSessionDescriptionInit,
     remoteId: string,
-  ): Promise<void> => {
+  ) => {
     if (peersRef.current[remoteId]) return;
 
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
-
-    localStream
-      ?.getTracks()
-      .forEach((track) => pc.addTrack(track, localStream));
-    pc.ontrack = (ev) => addRemoteStream(remoteId, ev.streams[0]);
-
-    pc.onicecandidate = (ev) => {
-      if (ev.candidate && socketRef.current) {
-        const msg: OutgoingWsMessage = {
+    localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    pc.ontrack = (e) => addRemoteStream(remoteId, e.streams[0]);
+    pc.onicecandidate = (e) =>
+      e.candidate &&
+      socketRef.current?.send(
+        JSON.stringify({
           type: "ice-candidate",
-          candidate: ev.candidate,
+          candidate: e.candidate,
           to: remoteId,
-          from: currentUserId,
-        };
-        socketRef.current.send(JSON.stringify(msg));
-      }
-    };
+          from: currentUid,
+        } satisfies Outgoing),
+      );
 
     await pc.setRemoteDescription(offer);
     await pc.setLocalDescription(await pc.createAnswer());
 
-    const answerMsg: OutgoingWsMessage = {
-      type: "answer",
-      answer: pc.localDescription!,
-      to: remoteId,
-      from: currentUserId,
-    };
-    socketRef.current?.send(JSON.stringify(answerMsg));
+    socketRef.current?.send(
+      JSON.stringify({
+        type: "answer",
+        answer: pc.localDescription!,
+        to: remoteId,
+        from: currentUid,
+      } satisfies Outgoing),
+    );
 
     peersRef.current[remoteId] = pc;
   };
@@ -327,26 +287,23 @@ export const useVideoConference = (
   const handleAnswer = async (
     answer: RTCSessionDescriptionInit,
     remoteId: string,
-  ): Promise<void> => {
+  ) => {
     await peersRef.current[remoteId]?.setRemoteDescription(answer);
   };
 
   const handleCandidate = async (
     candidate: RTCIceCandidateInit,
     remoteId: string,
-  ): Promise<void> => {
+  ) => {
     await peersRef.current[remoteId]?.addIceCandidate(
       new RTCIceCandidate(candidate),
     );
   };
 
-  const closePeer = (remoteId: string): void => {
+  const closePeer = (remoteId: string) => {
     peersRef.current[remoteId]?.close();
     delete peersRef.current[remoteId];
   };
 
-  return {
-    messages,
-    sendChatMessage,
-  };
-};
+  return { messages, sendChatMessage };
+}
