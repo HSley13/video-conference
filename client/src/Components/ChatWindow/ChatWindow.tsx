@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { Container, Row, Col } from "react-bootstrap";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { useVideoConference } from "../../Hooks/websocket";
@@ -7,66 +6,48 @@ import { useWebRTC } from "../../Contexts/WebRTCContext";
 
 export const ChatWindow = () => {
   const [draft, setDraft] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const endRef = useRef<HTMLDivElement | null>(null);
-
-  const { messages, sendChatMessage } = useVideoConference();
-
+  const [showEmojiPicker, setPickerOpen] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
   const { userInfo } = useWebRTC();
+  const { messages: chatMessages, sendChatMessage } = useVideoConference();
 
   useEffect(() => {
     requestAnimationFrame(() =>
       endRef.current?.scrollIntoView({ behavior: "smooth" }),
     );
-  }, [messages]);
+  }, [chatMessages]);
 
-  const handleSend = (txt: string) => {
-    const value = txt.trim();
-    if (!value) return;
-    sendChatMessage(value);
+  const handleSend = (text: string) => {
+    const msg = text.trim();
+    if (!msg) return;
+    sendChatMessage(msg);
     setDraft("");
     setPickerOpen(false);
   };
 
   return (
-    <Container
-      className="p-0 rounded shadow"
-      style={{ width: 320, height: 520 }}
-    >
-      <Row className="bg-light border-bottom m-0 py-2">
-        <Col>
-          <strong>Chat</strong>
-        </Col>
-      </Row>
+    <div className="flex flex-col h-[400px] w-80 bg-white rounded-lg overflow-hidden">
+      <h3 className="text-lg font-semibold m-2">Chat</h3>
 
-      <Row
-        className="flex-grow-1 overflow-auto m-0 px-3 py-2"
-        style={{ background: "#f3f4f6" }}
-      >
-        <Col xs={12}>
-          {messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              isCurrentUser={m.user.id === userInfo.id}
-            />
-          ))}
-          <div ref={endRef} />
-        </Col>
-      </Row>
-
-      <Row className="border-top m-0 p-2">
-        <Col xs={12}>
-          <MessageInput
-            newMessage={draft}
-            setNewMessage={setDraft}
-            handleSend={handleSend}
-            showEmojiPicker={pickerOpen}
-            setShowEmojiPicker={setPickerOpen}
-            handleEmojiClick={({ emoji }) => setDraft((p) => p + emoji)}
+      <div className="flex-1 overflow-y-auto rounded-t-lg p-2 bg-gray-200">
+        {chatMessages.map((m) => (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            isCurrentUser={m.user.id === userInfo.id}
           />
-        </Col>
-      </Row>
-    </Container>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      <MessageInput
+        newMessage={draft}
+        setNewMessage={setDraft}
+        handleSend={handleSend}
+        showEmojiPicker={showEmojiPicker}
+        setShowEmojiPicker={setPickerOpen}
+        handleEmojiClick={({ emoji }) => setDraft((p) => p + emoji)}
+      />
+    </div>
   );
 };
