@@ -77,6 +77,18 @@ func (s *Server) SetupRoutes() {
 	auth.Post("/login", s.handleLogin)
 	auth.Post("/refresh", s.handleRefreshToken)
 
+	rooms := api.Group("/rooms")
+	rooms.Post("/", s.handleCreateRoom)
+	// rooms.Get("/:id", s.handleGetRoom)
+	// rooms.Put("/:id", s.handleUpdateRoom)
+	// rooms.Delete("/:id", s.handleDeleteRoom)
+	//
+	// users := api.Group("/users")
+	// users.Get("/", s.handleGetUsers)
+	// users.Get("/:id", s.handleGetUser)
+	// users.Put("/:id", s.handleUpdateUser)
+	// users.Delete("/:id", s.handleDeleteUser)
+
 	ws := api.Group("/ws", s.authenticateWS)
 	ws.Get("/:roomID/:userID", websocket.New(s.handleWebSocket))
 
@@ -128,6 +140,35 @@ func (s *Server) handleRefreshToken(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(utils.SuccessResponse(fiber.Map{"access_token": access}))
+}
+
+func (s Server) handleCreateRoom(c *fiber.Ctx) error {
+	var Body struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+
+	if err := c.BodyParser(&Body); err != nil {
+		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
+	}
+
+	OwnerID := uuid.MustParse(c.Locals("jwtUserID").(string))
+	if OwnerID == uuid.Nil {
+		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid jwtUserID")
+	}
+
+	room := models.Room{
+		OwnerID:     OwnerID,
+		Title:       Body.Title,
+		Description: Body.Description,
+		IsActive:    true,
+	}
+
+	if err := s.roomRepo.CreateRoom(c.Context(), &room).Error; err != nil {
+		return utils.RespondWithError(c, fiber.StatusInternalServerError, "failed to create room")
+	}
+
+	return c.JSON(utils.SuccessResponse(fiber.Map{"roomID": room.ID}))
 }
 
 func (s *Server) authenticateWS(c *fiber.Ctx) error {

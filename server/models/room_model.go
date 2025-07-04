@@ -9,7 +9,8 @@ import (
 type Room struct {
 	ID              uuid.UUID `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
 	OwnerID         uuid.UUID `gorm:"type:uuid;not null;index"             json:"owner_id"`
-	Name            string    `gorm:"size:100;not null"                   json:"name"`
+	Title           string    `gorm:"size:100;not null"                   json:"title"`
+	Description     string    `gorm:"size:255;not null"                   json:"description"`
 	MaxParticipants int       `gorm:"not null;default:10"                json:"max_participants"`
 	IsActive        bool      `gorm:"not null;default:true"              json:"is_active"`
 	CreatedAt       time.Time `gorm:"not null;default:now()"             json:"created_at"`
