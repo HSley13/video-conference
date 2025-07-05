@@ -36,7 +36,7 @@ type joinRoomProps = {
 };
 export const joinRoom = async ({ id, password }: joinRoomProps) => {
   const response = await makeRequest({
-    url: `/room/${id}`,
+    url: `/room/join/${id}`,
     options: {
       method: "PUT",
       data: { password },

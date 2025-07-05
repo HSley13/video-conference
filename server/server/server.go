@@ -32,16 +32,12 @@ type Server struct {
 	userRepo *repositories.UserRepository
 }
 
-func New(
-	cfg *config.Config,
-	auth *services.AuthService,
+func New(cfg *config.Config, auth *services.AuthService,
 	ws *services.WebSocketService,
 	room *repositories.RoomRepository,
 	user *repositories.UserRepository,
 ) *Server {
-	app := fiber.New(fiber.Config{
-		ErrorHandler: utils.GlobalErrorHandler,
-	})
+	app := fiber.New(fiber.Config{ErrorHandler: utils.GlobalErrorHandler})
 
 	return &Server{
 		app:      app,
@@ -55,17 +51,15 @@ func New(
 
 func (s *Server) SetupMiddleware() {
 	s.app.Use(recover.New())
-
+	s.app.Use(logger.New(logger.Config{
+		TimeFormat: time.RFC3339,
+		Format:     "[${time}] ${status} – ${latency} ${method} ${path}\n",
+	}))
 	s.app.Use(cors.New(cors.Config{
 		AllowOrigins:     strings.Join(s.cfg.AllowedOrigins, ","),
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
 		AllowCredentials: true,
-	}))
-
-	s.app.Use(logger.New(logger.Config{
-		TimeFormat: time.RFC3339,
-		Format:     "[${time}] ${status} – ${latency} ${method} ${path}\n",
 	}))
 }
 
@@ -77,17 +71,9 @@ func (s *Server) SetupRoutes() {
 	auth.Post("/login", s.handleLogin)
 	auth.Post("/refresh", s.handleRefreshToken)
 
-	rooms := api.Group("/rooms")
+	rooms := api.Group("/room", s.authRequired)
 	rooms.Post("/", s.handleCreateRoom)
-	// rooms.Get("/:id", s.handleGetRoom)
-	// rooms.Put("/:id", s.handleUpdateRoom)
-	// rooms.Delete("/:id", s.handleDeleteRoom)
-	//
-	// users := api.Group("/users")
-	// users.Get("/", s.handleGetUsers)
-	// users.Get("/:id", s.handleGetUser)
-	// users.Put("/:id", s.handleUpdateUser)
-	// users.Delete("/:id", s.handleDeleteUser)
+	rooms.Post("/join/:id", s.handleJoinRoom)
 
 	ws := api.Group("/ws", s.authenticateWS)
 	ws.Get("/:roomID/:userID", websocket.New(s.handleWebSocket))
@@ -100,14 +86,12 @@ func (s *Server) handleRegister(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
-
-	user, err := s.authSvc.Register(c.Context(), req.Email, req.Password)
+	u, err := s.authSvc.Register(c.Context(), req.Email, req.Password)
 	if err != nil {
 		return utils.RespondWithError(c, fiber.StatusConflict, "registration failed")
 	}
-
-	log.Printf("[AUTH] register → %s", user.Email)
-	return c.Status(fiber.StatusCreated).JSON(utils.SuccessResponse(user))
+	log.Printf("[AUTH] register → %s", u.Email)
+	return c.Status(fiber.StatusCreated).JSON(utils.SuccessResponse(u))
 }
 
 func (s *Server) handleLogin(c *fiber.Ctx) error {
@@ -115,16 +99,13 @@ func (s *Server) handleLogin(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
-
-	access, refresh, err := s.authSvc.Login(c.Context(), req.Email, req.Password)
+	acc, ref, err := s.authSvc.Login(c.Context(), req.Email, req.Password)
 	if err != nil {
 		return utils.RespondWithError(c, fiber.StatusUnauthorized, "invalid credentials")
 	}
-
-	log.Printf("[AUTH] login → %s", req.Email)
 	return c.JSON(utils.SuccessResponse(fiber.Map{
-		"access_token":  access,
-		"refresh_token": refresh,
+		"access_token":  acc,
+		"refresh_token": ref,
 	}))
 }
 
@@ -133,116 +114,89 @@ func (s *Server) handleRefreshToken(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
-
-	access, err := s.authSvc.RefreshToken(c.Context(), req.RefreshToken)
+	acc, err := s.authSvc.RefreshToken(c.Context(), req.RefreshToken)
 	if err != nil {
-		return utils.RespondWithError(c, fiber.StatusUnauthorized, "token refresh failed")
+		return utils.RespondWithError(c, fiber.StatusUnauthorized, "refresh failed")
 	}
-
-	return c.JSON(utils.SuccessResponse(fiber.Map{"access_token": access}))
+	return c.JSON(utils.SuccessResponse(fiber.Map{"access_token": acc}))
 }
 
-func (s Server) handleCreateRoom(c *fiber.Ctx) error {
-	var Body struct {
+func (s *Server) handleCreateRoom(c *fiber.Ctx) error {
+	var body struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
 	}
-
-	if err := c.BodyParser(&Body); err != nil {
+	if err := c.BodyParser(&body); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
 
-	OwnerID := uuid.MustParse(c.Locals("jwtUserID").(string))
-	if OwnerID == uuid.Nil {
-		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid jwtUserID")
-	}
-
+	ownerID := c.Locals("jwtUserID").(uuid.UUID)
 	room := models.Room{
-		OwnerID:     OwnerID,
-		Title:       Body.Title,
-		Description: Body.Description,
+		ID:          uuid.New(),
+		OwnerID:     ownerID,
+		Title:       body.Title,
+		Description: body.Description,
 		IsActive:    true,
 	}
+	if err := s.roomRepo.CreateRoom(c.Context(), &room); err != nil {
+		return utils.RespondWithError(c, fiber.StatusInternalServerError, "create failed")
+	}
+	return c.JSON(utils.SuccessResponse(fiber.Map{"room": room}))
+}
 
-	if err := s.roomRepo.CreateRoom(c.Context(), &room).Error; err != nil {
-		return utils.RespondWithError(c, fiber.StatusInternalServerError, "failed to create room")
+func (s *Server) handleJoinRoom(c *fiber.Ctx) error {
+	roomID := c.Params("id")
+	userID := c.Locals("jwtUserID").(uuid.UUID)
+
+	room, err := s.roomRepo.GetRoom(c.Context(), roomID)
+	if err != nil || !room.IsActive {
+		return utils.RespondWithError(c, fiber.StatusNotFound, "room not found")
+	}
+	if err := s.roomRepo.AddParticipant(c.Context(), roomID, userID.String()); err != nil {
+		return utils.RespondWithError(c, fiber.StatusInternalServerError, "join failed")
 	}
 
-	return c.JSON(utils.SuccessResponse(fiber.Map{"roomID": room.ID}))
+	ids, _ := s.roomRepo.GetParticipants(c.Context(), roomID)
+	list := make([]fiber.Map, 0, len(ids))
+	for _, id := range ids {
+		if u, _ := s.userRepo.GetUserByID(c.Context(), id); u != nil {
+			list = append(list, fiber.Map{"id": u.ID, "name": u.Name, "imgUrl": u.ImgUrl})
+		}
+	}
+
+	return c.JSON(utils.SuccessResponse(fiber.Map{
+		"room_id":      roomID,
+		"participants": list,
+	}))
 }
 
 func (s *Server) authenticateWS(c *fiber.Ctx) error {
 	if !websocket.IsWebSocketUpgrade(c) {
 		return fiber.ErrUpgradeRequired
 	}
-
-	token := c.Get("Authorization")
-	if token == "" {
-		token = c.Cookies("access_token")
-	}
-	if token == "" {
-		token = c.Query("access_token")
-	}
-	if token == "" {
-		log.Print("[WS-AUTH] missing token")
-		return fiber.ErrUnauthorized
-	}
-
-	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		token = strings.TrimSpace(token[7:])
-	}
-
+	token := extractToken(c)
 	claims, err := s.authSvc.ValidateToken(token)
 	if err != nil {
-		log.Printf("[WS-AUTH] invalid token: %v", err)
 		return fiber.ErrUnauthorized
 	}
-
-	sub, _ := claims["sub"].(string)
-	if sub == "" {
-		return fiber.ErrUnauthorized
-	}
-
-	c.Locals("ctx", c.Context())
+	sub := claims["sub"].(string)
 	c.Locals("jwtUserID", sub)
+	c.Locals("ctx", c.Context())
 	return c.Next()
 }
 
 func (s *Server) handleWebSocket(c *websocket.Conn) {
 	ctx := c.Locals("ctx").(context.Context)
-	jwtUser := c.Locals("jwtUserID").(string)
-	paramUID := c.Params("userID")
-	paramRID := c.Params("roomID")
+	userID := c.Locals("jwtUserID").(string)
+	roomID := c.Params("roomID")
 
-	userUUID, err1 := uuid.Parse(paramUID)
-	roomUUID, err2 := uuid.Parse(paramRID)
-	if err1 != nil || err2 != nil {
-		_ = c.WriteJSON(fiber.Map{"error": "invalid roomId or userId"})
+	if ok, _ := s.roomRepo.GetRoom(ctx, roomID); ok == nil {
+		_ = c.WriteJSON(fiber.Map{"error": "unknown room"})
 		_ = c.Close()
 		return
 	}
 
-	if userUUID.String() != jwtUser {
-		_ = c.WriteJSON(fiber.Map{"error": "user id mismatch"})
-		_ = c.Close()
-		return
-	}
-
-	log.Printf("[WS] handshake OK user=%s room=%s", jwtUser, roomUUID)
-
-	if _, err := s.roomRepo.GetRoom(ctx, roomUUID.String()); err != nil {
-		_ = s.roomRepo.CreateRoom(ctx, &models.Room{
-			ID:              roomUUID,
-			Name:            "Room " + roomUUID.String()[:8],
-			OwnerID:         userUUID,
-			MaxParticipants: 10,
-			IsActive:        true,
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-		})
-	}
-
-	ids, _ := s.roomRepo.GetParticipants(ctx, roomUUID.String())
+	ids, _ := s.roomRepo.GetParticipants(ctx, roomID)
 	list := make([]fiber.Map, 0, len(ids))
 	for _, id := range ids {
 		if u, _ := s.userRepo.GetUserByID(ctx, id); u != nil {
@@ -251,11 +205,35 @@ func (s *Server) handleWebSocket(c *websocket.Conn) {
 	}
 	_ = c.WriteJSON(fiber.Map{"type": "users-list", "users": list})
 
-	s.wsSvc.HandleConnection(ctx, c, roomUUID.String(), userUUID.String())
+	s.wsSvc.HandleConnection(ctx, c, roomID, userID)
+}
+
+func (s *Server) authRequired(c *fiber.Ctx) error {
+	token := extractToken(c)
+	claims, err := s.authSvc.ValidateToken(token)
+	if err != nil {
+		return fiber.ErrUnauthorized
+	}
+	c.Locals("jwtUserID", uuid.MustParse(claims["sub"].(string)))
+	return c.Next()
+}
+
+func extractToken(c *fiber.Ctx) string {
+	t := c.Get("Authorization")
+	if t == "" {
+		t = c.Cookies("access_token")
+	}
+	if t == "" {
+		t = c.Query("access_token")
+	}
+	if strings.HasPrefix(strings.ToLower(t), "bearer ") {
+		t = strings.TrimSpace(t[7:])
+	}
+	return t
 }
 
 func (s *Server) healthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.5"})
+	return c.JSON(fiber.Map{"status": "healthy", "version": "1.0.6"})
 }
 
 func (s *Server) Start() {
@@ -267,13 +245,13 @@ func (s *Server) Start() {
 
 	go func() {
 		<-quit
-		log.Println("graceful shutdown…")
+		log.Println("graceful shutdown …")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = s.app.ShutdownWithContext(ctx)
 	}()
 
-	log.Printf("HTTP/WS listening on :%s", s.cfg.Port)
+	log.Printf("HTTP / WS listening on :%s", s.cfg.Port)
 	if err := s.app.Listen(":" + s.cfg.Port); err != nil {
 		log.Fatalf("fiber.Listen: %v", err)
 	}
