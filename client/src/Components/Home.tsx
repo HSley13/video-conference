@@ -2,17 +2,30 @@ import { VideoWindow } from "./VideoWindow/VideoWindow";
 import { useState } from "react";
 import { Container, Row, Col, Form, Button } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
+import { createRoom } from "../Services/room";
+import { useAsyncFn } from "../Hooks/useAsync";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export const Home = () => {
   const [roomName, setRoomName] = useState("");
   const [roomLink, setRoomLink] = useState("");
   const [showVideo, setShowVideo] = useState(false);
+  const createRoomFn = useAsyncFn(createRoom);
 
   const navigate = useNavigate();
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!roomName.trim()) return;
-    navigate(`/room/${encodeURIComponent(roomName.trim())}`);
+
+    const response = await createRoomFn.execute({
+      title: roomName,
+      description: "This is the Avengers Group",
+    });
+
+    setRoomLink(`/room/${response.id}`);
+    toast.success("Room created successfully!");
   };
 
   const handleJoinRoom = () => {
@@ -51,6 +64,7 @@ export const Home = () => {
             >
               Create&nbsp;&amp;&nbsp;Start
             </Button>
+            <ToastContainer position="bottom-right" />
           </Col>
 
           <Col xs={12}>

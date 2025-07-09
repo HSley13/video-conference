@@ -15,16 +15,12 @@ type createRoomProps = {
   description?: string;
   password?: string;
 };
-export const createRoom = async ({
-  title,
-  description,
-  password,
-}: createRoomProps) => {
+export const createRoom = async ({ title, description }: createRoomProps) => {
   const response = await makeRequest({
     url: `/room`,
     options: {
       method: "POST",
-      data: { title, description, password },
+      data: { title, description },
     },
   });
   return response;

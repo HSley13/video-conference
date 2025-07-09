@@ -141,6 +141,9 @@ func (s *Server) handleCreateRoom(c *fiber.Ctx) error {
 	if err := s.roomRepo.CreateRoom(c.Context(), &room); err != nil {
 		return utils.RespondWithError(c, fiber.StatusInternalServerError, "create failed")
 	}
+
+	log.Printf("[ROOM] create → %s", room)
+
 	return c.JSON(utils.SuccessResponse(fiber.Map{"room": room}))
 }
 
