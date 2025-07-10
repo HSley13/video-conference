@@ -9,7 +9,7 @@ import {
   SetStateAction,
   ReactNode,
 } from "react";
-import { getUserInfo } from "../Services/auth";
+import { getUserInfo } from "../Services/user";
 import { useAsync } from "../Hooks/useAsync";
 import { useUser } from "../Hooks/useUser";
 import { User, UserInfo } from "../Types/types";
@@ -60,20 +60,20 @@ export function WebRTCProvider({
     accessToken,
   });
 
-  const { value: fetched } = useAsync(
-    () => getUserInfo({ id: userIdParam ?? "" }),
-    [userIdParam],
-  );
+  // const { value: fetched } = useAsync(
+  // () => getUserInfo({ id: userIdParam ?? "" }),
+  // [userIdParam],
+  // );
 
-  useEffect(() => {
-    if (!fetched) return;
-    setUserInfo((prev) => ({
-      ...prev,
-      accessToken: fetched.accessToken,
-      newPassword: fetched.newPassword,
-      congirmPassword: fetched.confirmPassword,
-    }));
-  }, [fetched]);
+  // useEffect(() => {
+  // if (!fetched) return;
+  // setUserInfo((prev) => ({
+  // ...prev,
+  // accessToken: fetched.accessToken,
+  // newPassword: fetched.newPassword,
+  // congirmPassword: fetched.confirmPassword,
+  // }));
+  // }, [fetched]);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamMap>({});

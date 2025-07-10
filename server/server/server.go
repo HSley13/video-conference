@@ -71,7 +71,8 @@ func (s *Server) SetupRoutes() {
 	auth.Post("/login", s.handleLogin)
 	auth.Post("/refresh", s.handleRefreshToken)
 
-	rooms := api.Group("/room", s.authRequired)
+	// rooms := api.Group("/room", s.authRequired)
+	rooms := api.Group("/room")
 	rooms.Post("/", s.handleCreateRoom)
 	rooms.Post("/join/:id", s.handleJoinRoom)
 
@@ -130,19 +131,20 @@ func (s *Server) handleCreateRoom(c *fiber.Ctx) error {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
 
-	ownerID := c.Locals("jwtUserID").(uuid.UUID)
+	// ownerID := c.Locals("jwtUserID").(uuid.UUID)
 	room := models.Room{
-		ID:          uuid.New(),
-		OwnerID:     ownerID,
-		Title:       body.Title,
-		Description: body.Description,
-		IsActive:    true,
+		ID:              uuid.New(),
+		OwnerID:         uuid.New(),
+		Title:           body.Title,
+		Description:     body.Description,
+		MaxParticipants: 10,
+		IsActive:        true,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 	if err := s.roomRepo.CreateRoom(c.Context(), &room); err != nil {
 		return utils.RespondWithError(c, fiber.StatusInternalServerError, "create failed")
 	}
-
-	log.Printf("[ROOM] create → %s", room)
 
 	return c.JSON(utils.SuccessResponse(fiber.Map{"room": room}))
 }

@@ -12,8 +12,7 @@ export const getRoom = async ({ id }: getRoomProps) => {
 
 type createRoomProps = {
   title: string;
-  description?: string;
-  password?: string;
+  description: string;
 };
 export const createRoom = async ({ title, description }: createRoomProps) => {
   const response = await makeRequest({

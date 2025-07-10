@@ -10,7 +10,7 @@ import "react-toastify/dist/ReactToastify.css";
 export const Home = () => {
   const [roomName, setRoomName] = useState("");
   const [roomLink, setRoomLink] = useState("");
-  const [showVideo, setShowVideo] = useState(false);
+  // const [showVideo, setShowVideo] = useState(false);
   const createRoomFn = useAsyncFn(createRoom);
 
   const navigate = useNavigate();
@@ -19,13 +19,12 @@ export const Home = () => {
     e.preventDefault();
     if (!roomName.trim()) return;
 
-    const response = await createRoomFn.execute({
+    const createRoomResponse = await createRoomFn.execute({
       title: roomName,
       description: "This is the Avengers Group",
     });
 
-    setRoomLink(`/room/${response.id}`);
-    toast.success("Room created successfully!");
+    toast.success("Room created: " + createRoomResponse.id);
   };
 
   const handleJoinRoom = () => {
@@ -33,15 +32,15 @@ export const Home = () => {
     navigate(roomLink.trim());
   };
 
-  if (showVideo) {
-    return <VideoWindow />;
-  }
+  // if (showVideo) {
+  // return <VideoWindow />;
+  // }
 
   return (
     <>
-      <Button className="mb-3" onClick={() => setShowVideo(true)}>
-        VideoConference
-      </Button>
+      {/* <Button className="mb-3" onClick={() => setShowVideo(true)}> */}
+      {/* VideoConference */}
+      {/* </Button> */}
 
       <Container
         fluid
@@ -64,7 +63,7 @@ export const Home = () => {
             >
               Create&nbsp;&amp;&nbsp;Start
             </Button>
-            <ToastContainer position="bottom-right" />
+            <ToastContainer position="top-center" />
           </Col>
 
           <Col xs={12}>
