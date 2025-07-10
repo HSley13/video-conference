@@ -9,8 +9,6 @@ import {
   SetStateAction,
   ReactNode,
 } from "react";
-import { getUserInfo } from "../Services/user";
-import { useAsync } from "../Hooks/useAsync";
 import { useUser } from "../Hooks/useUser";
 import { User, UserInfo } from "../Types/types";
 
@@ -34,11 +32,7 @@ export interface WebRTCContextValue {
 
 const WebRTCContext = createContext<WebRTCContextValue | undefined>(undefined);
 
-export function WebRTCProvider({
-  children,
-}: {
-  children: ReactNode;
-}): JSX.Element {
+export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
   const roomId = qs.get("room") ?? "550e8400-e29b-41d4-a716-446655440000";
 
   const fallbackId = useUser();
@@ -142,7 +136,7 @@ export function WebRTCProvider({
   return (
     <WebRTCContext.Provider value={ctxValue}>{children}</WebRTCContext.Provider>
   );
-}
+};
 
 export const useWebRTC = (): WebRTCContextValue => {
   const ctx = useContext(WebRTCContext);

@@ -83,11 +83,15 @@ func (s *Server) SetupRoutes() {
 }
 
 func (s *Server) handleRegister(c *fiber.Ctx) error {
-	var req struct{ Email, Password string }
+	var req struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
 	if err := c.BodyParser(&req); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}
-	u, err := s.authSvc.Register(c.Context(), req.Email, req.Password)
+	u, err := s.authSvc.Register(c.Context(), req.Username, req.Email, req.Password)
 	if err != nil {
 		return utils.RespondWithError(c, fiber.StatusConflict, "registration failed")
 	}
@@ -96,7 +100,10 @@ func (s *Server) handleRegister(c *fiber.Ctx) error {
 }
 
 func (s *Server) handleLogin(c *fiber.Ctx) error {
-	var req struct{ Email, Password string }
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
 	if err := c.BodyParser(&req); err != nil {
 		return utils.RespondWithError(c, fiber.StatusBadRequest, "invalid body")
 	}

@@ -1,12 +1,12 @@
 import { makeRequest } from "./makeRequest";
 
-type SignInProps = {
+type LoginProps = {
   email: string;
   password: string;
 };
-export const signIn = async ({ email, password }: SignInProps) => {
+export const login = async ({ email, password }: LoginProps) => {
   const response = await makeRequest({
-    url: "/auth/signIn",
+    url: "/auth/login",
     options: {
       method: "POST",
       data: { email, password },
@@ -15,23 +15,21 @@ export const signIn = async ({ email, password }: SignInProps) => {
   return response;
 };
 
-type SignUpProps = {
-  firstName: string;
-  lastName: string;
+type RegisterProps = {
+  username: string;
   email: string;
   password: string;
 };
-export const signUp = async ({
-  firstName,
-  lastName,
+export const register = async ({
+  username,
   email,
   password,
-}: SignUpProps) => {
+}: RegisterProps) => {
   const response = await makeRequest({
-    url: "/auth/signUp",
+    url: "/auth/register",
     options: {
       method: "POST",
-      data: { firstName, lastName, email, password },
+      data: { username, email, password },
     },
   });
   return response;

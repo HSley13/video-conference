@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 	"video-conference/db_aws"
 	"video-conference/models"
@@ -21,15 +20,14 @@ func NewAuthService(repo *repositories.UserRepository, secret string) *AuthServi
 	return &AuthService{userRepo: repo, jwtSecret: []byte(secret)}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
+func (s *AuthService) Register(ctx context.Context, username string, email string, password string) (*models.User, error) {
 	hash, err := db_aws.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	name := strings.Split(email, "@")[0]
 	user := &models.User{
-		Name:         name,
+		Name:         username,
 		ImgUrl:       "https://via.placeholder.com/150",
 		Email:        email,
 		HashPassword: hash,
