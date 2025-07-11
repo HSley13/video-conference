@@ -31,7 +31,7 @@ func (s *AuthService) Register(ctx context.Context, username string, email strin
 	}
 
 	user := &models.User{
-		Name:         username,
+		UserName:     username,
 		ImgUrl:       "https://via.placeholder.com/150",
 		Email:        email,
 		HashPassword: hash,

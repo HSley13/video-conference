@@ -1,13 +1,8 @@
 export type UserInfo = {
   id: string;
-  firstName: string;
-  lastName: string;
+  username: string;
   email: string;
   imageUrl: string;
-  newPassword?: string;
-  confirmPassword?: string;
-  accessToken?: string;
-  refreshToken?: string;
 };
 
 export type Message = {
@@ -17,7 +12,7 @@ export type Message = {
   user: {
     id: string;
     name: string;
-    photo: string;
+    imgUrl: string;
   };
 };
 

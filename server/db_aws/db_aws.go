@@ -194,7 +194,7 @@ func InitDb(dsn string) *gorm.DB {
 func GetOrCreateUser(db *gorm.DB, username string) models.User {
 	var user models.User
 	if err := db.Where("name = ?", username).First(&user).Error; err != nil {
-		user = models.User{Name: username}
+		user = models.User{UserName: username}
 		if createErr := db.Create(&user).Error; createErr != nil {
 			log.Fatalf("Failed to create user: %v", createErr)
 		}

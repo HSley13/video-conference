@@ -8,14 +8,14 @@ import {
   Dispatch,
   SetStateAction,
   ReactNode,
+  useMemo,
 } from "react";
-import { useUser } from "../Hooks/useUser";
-import { User, UserInfo } from "../Types/types";
+import { useSearchParams } from "react-router-dom";
 
-const qs = new URLSearchParams(window.location.search);
-const envTokenRaw = import.meta.env.VITE_ACCESS_TOKEN as string | undefined;
-const accessToken =
-  envTokenRaw?.trim() || localStorage.getItem("access_token") || "";
+import { useUser } from "../Hooks/useUser";
+import { useAsync } from "../Hooks/useAsync";
+import { getUserInfo } from "../Services/user";
+import { User, UserInfo } from "../Types/types";
 
 type RemoteStreamMap = Record<string, MediaStream>;
 
@@ -33,42 +33,34 @@ export interface WebRTCContextValue {
 const WebRTCContext = createContext<WebRTCContextValue | undefined>(undefined);
 
 export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
-  const roomId = qs.get("room") ?? "550e8400-e29b-41d4-a716-446655440000";
-
-  const fallbackId = useUser();
-  const userIdParam =
-    qs.get("uid") ?? import.meta.env.VITE_USER_ID ?? fallbackId;
-  const firstName =
-    qs.get("firstName") ?? import.meta.env.VITE_FIRST_NAME ?? "";
-  const imageUrlQS = qs.get("imageUrl") ?? import.meta.env.VITE_IMAGE_URL ?? "";
-  const emailQS = qs.get("email") ?? import.meta.env.VITE_EMAIL ?? "";
+  const [search] = useSearchParams();
+  const roomId = search.get("room") ?? "";
+  const fallbackUser = useUser();
+  const userIdParam = search.get("uid") ?? fallbackUser?.id ?? "";
 
   const [userInfo, setUserInfo] = useState<UserInfo>({
     id: userIdParam,
-    firstName,
-    lastName: "",
-    email: emailQS,
-    imageUrl: imageUrlQS,
-    newPassword: "",
-    confirmPassword: "",
-    accessToken,
+    username: "",
+    email: "",
+    imageUrl: "",
   });
-
+  //
   // const { value: fetched } = useAsync(
-  // () => getUserInfo({ id: userIdParam ?? "" }),
-  // [userIdParam],
+  //   () =>
+  //     userIdParam ? getUserInfo({ id: userIdParam }) : Promise.resolve(null),
+  //   [userIdParam],
   // );
-
+  //
   // useEffect(() => {
-  // if (!fetched) return;
-  // setUserInfo((prev) => ({
-  // ...prev,
-  // accessToken: fetched.accessToken,
-  // newPassword: fetched.newPassword,
-  // congirmPassword: fetched.confirmPassword,
-  // }));
+  //   if (!fetched) return;
+  //   setUserInfo({
+  //     id: fetched.id,
+  //     username: fetched.username,
+  //     email: fetched.email,
+  //     imageUrl: fetched.imageUrl,
+  //   });
   // }, [fetched]);
-
+  //
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamMap>({});
   const [users, setUsers] = useState<User[]>([]);
@@ -122,16 +114,27 @@ export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const ctxValue: WebRTCContextValue = {
-    localStream,
-    remoteStreams,
-    users,
-    addRemoteStream,
-    removeRemoteStream,
-    setUsers,
-    roomId,
-    userInfo,
-  };
+  const ctxValue = useMemo<WebRTCContextValue>(
+    () => ({
+      localStream,
+      remoteStreams,
+      users,
+      addRemoteStream,
+      removeRemoteStream,
+      setUsers,
+      roomId,
+      userInfo,
+    }),
+    [
+      localStream,
+      remoteStreams,
+      users,
+      addRemoteStream,
+      removeRemoteStream,
+      roomId,
+      userInfo,
+    ],
+  );
 
   return (
     <WebRTCContext.Provider value={ctxValue}>{children}</WebRTCContext.Provider>

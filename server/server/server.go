@@ -63,12 +63,16 @@ func (s *Server) SetupRoutes() {
 	auth.Post("/login", s.handleLogin)
 	auth.Post("/refresh", s.handleRefresh)
 
+	user := api.Group("/user", s.authRequired)
+	user.Get("/userInfo/:id", s.handleUserInfo)
+	// user.Post("/updataUserInfo", s.handleUpdateUserInfo)
+
 	room := api.Group("/room", s.authRequired)
 	room.Post("/", s.handleCreateRoom)
 	room.Post("/join/:id", s.handleJoinRoom)
 
 	ws := api.Group("/ws", s.authenticateWS)
-	ws.Get("/:roomID/:userID", websocket.New(s.handleWebSocket))
+	ws.Get("/:roomID", websocket.New(s.handleWebSocket))
 
 	api.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "healthy", "version": "1.2.0"})
@@ -151,7 +155,7 @@ func (s *Server) handleCreateRoom(c *fiber.Ctx) error {
 	if err := s.roomRepo.CreateRoom(c.Context(), &room); err != nil {
 		return utils.RespondWithError(c, fiber.StatusInternalServerError, "create failed")
 	}
-	return utils.SuccessResponse(c, fiber.Map{"room": room})
+	return utils.SuccessResponse(c, fiber.Map{"id": room.ID})
 }
 
 func (s *Server) handleJoinRoom(c *fiber.Ctx) error {
@@ -170,7 +174,7 @@ func (s *Server) handleJoinRoom(c *fiber.Ctx) error {
 	list := make([]fiber.Map, 0, len(ids))
 	for _, id := range ids {
 		if u, _ := s.userRepo.GetUserByID(c.Context(), id); u != nil {
-			list = append(list, fiber.Map{"id": u.ID, "name": u.Name, "imgUrl": u.ImgUrl})
+			list = append(list, fiber.Map{"id": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
 		}
 	}
 	return utils.SuccessResponse(c, fiber.Map{
@@ -228,12 +232,20 @@ func (s *Server) handleWebSocket(conn *websocket.Conn) {
 	list := make([]fiber.Map, 0, len(ids))
 	for _, id := range ids {
 		if u, _ := s.userRepo.GetUserByID(ctx, id); u != nil {
-			list = append(list, fiber.Map{"id": u.ID, "name": u.Name, "imgUrl": u.ImgUrl})
+			list = append(list, fiber.Map{"id": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
 		}
 	}
 	_ = conn.WriteJSON(fiber.Map{"type": "users-list", "users": list})
 
 	s.wsSvc.HandleConnection(ctx, conn, roomID, uid)
+}
+
+func (s *Server) handleUserInfo(c *fiber.Ctx) error {
+	uid := c.Params("id")
+	if u, _ := s.userRepo.GetUserByID(c.Context(), uid); u != nil {
+		return utils.SuccessResponse(c, fiber.Map{"id": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
+	}
+	return utils.RespondWithError(c, fiber.StatusNotFound, "user not found")
 }
 
 func (s *Server) Start() {

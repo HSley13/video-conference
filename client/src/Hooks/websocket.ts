@@ -6,7 +6,7 @@ import { FormatTime } from "../Utils/utils";
 
 interface WsUser {
   id: string;
-  name: string;
+  userName: string;
   imgUrl: string;
 }
 interface UsersListMsg {
@@ -43,7 +43,7 @@ interface ChatMsg {
   id: string;
   text: string;
   time: string;
-  user: Pick<User, "id" | "name" | "photo">;
+  user: Pick<User, "id" | "name" | "imgUrl">;
 }
 
 type Incoming =
@@ -76,10 +76,10 @@ type Outgoing =
     }
   | { type: "chat-message"; message: Message };
 
-export function useVideoConference() {
+export const useVideoConference = () => {
   const {
     roomId,
-    userInfo: { id: currentUid, firstName, imageUrl, accessToken },
+    userInfo: { id: currentUid, username: firstName, imageUrl },
     localStream,
     addRemoteStream,
     removeRemoteStream,
@@ -94,11 +94,9 @@ export function useVideoConference() {
   const knownUserIds = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!currentUid || !accessToken) return;
+    if (!currentUid) return;
 
-    const url =
-      `ws://localhost:3002/video-conference/ws/${roomId}/${currentUid}` +
-      `?access_token=${encodeURIComponent(accessToken)}`;
+    const url = `ws://localhost:3002/video-conference/ws/${roomId}`;
 
     const openSocket = () => {
       socketRef.current = new WebSocket(url);
@@ -117,7 +115,7 @@ export function useVideoConference() {
       socketRef.current?.close();
       Object.values(peersRef.current).forEach((pc) => pc.close());
     };
-  }, [roomId, currentUid, accessToken]);
+  }, [roomId, currentUid]);
 
   const handleSocketMessage = async (msg: Incoming) => {
     switch (msg.type) {
@@ -127,7 +125,7 @@ export function useVideoConference() {
         setUsers(
           others.map<User>((u) => ({
             id: u.id,
-            name: u.name,
+            name: u.userName,
             imgUrl: u.imgUrl,
             isAudioOn: true,
             isVideoOn: true,
@@ -203,7 +201,7 @@ export function useVideoConference() {
       id: uuid(),
       text,
       time: FormatTime(new Date()),
-      user: { id: currentUid, name: firstName, photo: imageUrl },
+      user: { id: currentUid, name: firstName, imgUrl: imageUrl },
     };
     seenMsgIds.current.add(msg.id);
     setMessages((prev) => [...prev, msg]);
@@ -306,4 +304,4 @@ export function useVideoConference() {
   };
 
   return { messages, sendChatMessage };
-}
+};

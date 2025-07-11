@@ -1,4 +1,3 @@
-import { VideoWindow } from "./VideoWindow/VideoWindow";
 import { useState } from "react";
 import { Container, Row, Col, Form, Button } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +9,6 @@ import "react-toastify/dist/ReactToastify.css";
 export const Home = () => {
   const [roomName, setRoomName] = useState("");
   const [roomLink, setRoomLink] = useState("");
-  // const [showVideo, setShowVideo] = useState(false);
   const createRoomFn = useAsyncFn(createRoom);
 
   const navigate = useNavigate();
@@ -24,24 +22,18 @@ export const Home = () => {
       description: "This is the Avengers Group",
     });
 
-    toast.success("Room created: " + createRoomResponse.id);
+    console.log("createRoomResponse: ", createRoomResponse.message.id);
+    navigate(`/videoWindow?room=${createRoomResponse.message.id}`);
   };
 
   const handleJoinRoom = () => {
     if (!roomLink.trim()) return;
-    navigate(roomLink.trim());
+    console.log("roomLink: ", roomLink.trim());
+    navigate(`/videoWindow?room=${roomLink}`);
   };
-
-  // if (showVideo) {
-  // return <VideoWindow />;
-  // }
 
   return (
     <>
-      {/* <Button className="mb-3" onClick={() => setShowVideo(true)}> */}
-      {/* VideoConference */}
-      {/* </Button> */}
-
       <Container
         fluid
         className="d-flex align-items-center justify-content-center vh-100 bg-light"

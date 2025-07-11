@@ -39,11 +39,7 @@ func NewWebSocketService(
 	}
 }
 
-func (s *WebSocketService) HandleConnection(
-	ctx context.Context,
-	conn *websocket.Conn,
-	roomID, userID string,
-) {
+func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket.Conn, roomID string, userID string) {
 	s.mutex.Lock()
 	roomMap, ok := s.connections[roomID]
 	if !ok {
@@ -75,7 +71,7 @@ func (s *WebSocketService) HandleConnection(
 	join := fiberMap(
 		"type", "user-joined",
 		"userID", user.ID,
-		"userName", user.Name,
+		"userName", user.UserName,
 		"userPhoto", user.ImgUrl,
 		"sender", userID,
 	)
@@ -104,19 +100,14 @@ func (s *WebSocketService) HandleConnection(
 	leave := fiberMap(
 		"type", "user-left",
 		"userID", user.ID,
-		"userName", user.Name,
+		"userName", user.UserName,
 		"userPhoto", user.ImgUrl,
 		"sender", userID,
 	)
 	_ = s.roomRepo.PublishMessage(ctx, roomID, leave)
 }
 
-func (s *WebSocketService) readFromClient(
-	ctx context.Context,
-	conn *websocket.Conn,
-	roomID, userID string,
-	user *models.User,
-) {
+func (s *WebSocketService) readFromClient(ctx context.Context, conn *websocket.Conn, roomID string, userID string, user *models.User) {
 	for {
 		mt, raw, err := conn.ReadMessage()
 		if err != nil {
@@ -145,11 +136,7 @@ func (s *WebSocketService) readFromClient(
 	}
 }
 
-func (s *WebSocketService) handleChat(
-	ctx context.Context,
-	roomID, userID string,
-	raw map[string]any,
-) {
+func (s *WebSocketService) handleChat(ctx context.Context, roomID string, userID string, raw map[string]any) {
 	msg := raw
 	if inner, ok := raw["message"].(map[string]any); ok {
 		msg = inner
@@ -193,15 +180,15 @@ func (s *WebSocketService) ensureUser(ctx context.Context, uid string) *models.U
 
 	parsed, _ := uuid.Parse(uid)
 	user := &models.User{
-		ID:     parsed,
-		Name:   "Anonymous",
-		ImgUrl: "https://via.placeholder.com/150",
+		ID:       parsed,
+		UserName: "Anonymous",
+		ImgUrl:   "https://via.placeholder.com/150",
 	}
 	_ = s.userRepo.CreateUser(ctx, user)
 	return user
 }
 
-func (s *WebSocketService) cleanupConnection(ctx context.Context, roomID, uid string) {
+func (s *WebSocketService) cleanupConnection(ctx context.Context, roomID string, uid string) {
 	s.mutex.Lock()
 	if roomMap, ok := s.connections[roomID]; ok {
 		delete(roomMap, uid)

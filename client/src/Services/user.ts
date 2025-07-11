@@ -5,32 +5,29 @@ type GetUserInfoProps = {
 };
 export const getUserInfo = async ({ id }: GetUserInfoProps) => {
   const response = await makeRequest({
-    url: `/auth/userInfo/${id}`,
+    url: `/user/userInfo/${id}`,
   });
   return response;
 };
 
 type UpdateUserInfoProps = {
-  firstName: string;
-  lastName: string;
+  userName: string;
   email: string;
   file?: File;
 };
 export const updateUserInfo = async ({
-  firstName,
-  lastName,
+  userName,
   email,
   file,
 }: UpdateUserInfoProps) => {
   const formData = new FormData();
-  formData.append("firstName", firstName);
-  formData.append("lastName", lastName);
+  formData.append("userName", userName);
   formData.append("email", email);
   if (file) {
     formData.append("image", file);
   }
   const response = await makeRequest({
-    url: `/auth/updateUserInfo`,
+    url: `/user/updateUserInfo`,
     options: {
       method: "PUT",
       data: formData,
@@ -44,7 +41,7 @@ type UpdatePasswordProps = {
 };
 export const updatePassword = async ({ newPassword }: UpdatePasswordProps) => {
   const response = await makeRequest({
-    url: `/auth/updatePassword`,
+    url: `/user/updatePassword`,
     options: {
       method: "PUT",
       data: { newPassword },
@@ -55,7 +52,7 @@ export const updatePassword = async ({ newPassword }: UpdatePasswordProps) => {
 
 export const deleteUser = async () => {
   const response = await makeRequest({
-    url: `/auth/deleteUser`,
+    url: `/user/deleteUser`,
     options: {
       method: "DELETE",
     },
@@ -65,7 +62,7 @@ export const deleteUser = async () => {
 
 export const passwordForgotten = async ({ email }: { email: string }) => {
   const response = await makeRequest({
-    url: `/auth/passwordForgotten`,
+    url: `/user/passwordForgotten`,
     options: {
       method: "POST",
       data: { email },
