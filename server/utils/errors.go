@@ -9,11 +9,11 @@ func RespondWithError(c *fiber.Ctx, status int, message string) error {
 	})
 }
 
-func SuccessResponse(data interface{}) fiber.Map {
-	return fiber.Map{
+func SuccessResponse(c *fiber.Ctx, data interface{}) error {
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
-		"data":    data,
-	}
+		"message": data,
+	})
 }
 
 func GlobalErrorHandler(c *fiber.Ctx, err error) error {

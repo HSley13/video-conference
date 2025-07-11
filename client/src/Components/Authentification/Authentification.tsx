@@ -5,7 +5,7 @@ import { useAsyncFn } from "../../Hooks/useAsync";
 
 type AuthentificationState = {
   loginEmail: string;
-  lginPassword: string;
+  loginPassword: string;
   registerUsername: string;
   registerEmail: string;
   registerPassword: string;
@@ -18,7 +18,7 @@ export const Authentification = () => {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [authState, setAuthState] = useState<AuthentificationState>({
     loginEmail: "",
-    lginPassword: "",
+    loginPassword: "",
     registerUsername: "",
     registerEmail: "",
     registerPassword: "",
@@ -49,53 +49,71 @@ export const Authentification = () => {
     return !Object.values(newErrors).some(Boolean);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const fields = isLogin
-      ? { email: authState.loginEmail, password: authState.lginPassword }
-      : {
-          username: authState.registerUsername,
-          email: authState.registerEmail,
-          password: authState.registerPassword,
-          confirmPassword: authState.registerConfirmPassword,
-        };
+    if (
+      !validateFields({
+        email: authState.loginEmail,
+        password: authState.loginPassword,
+      })
+    ) {
+      return;
+    }
 
-    if (!validateFields(fields)) return;
+    const res = await loginFn.execute({
+      email: authState.loginEmail,
+      password: authState.loginPassword,
+    });
 
-    try {
-      if (isLogin) {
-        const res = await loginFn.execute({
-          email: fields.email,
-          password: fields.password,
-        });
-        if (res?.status === 200) {
-          resetState();
-          navigate("/mainwindow");
-          return;
-        }
-      } else {
-        const res = await registerFn.execute({
-          username: fields.username || "",
-          email: fields.email,
-          password: fields.password,
-        });
-        if (res?.status === 200 || res?.status === 201) {
-          resetState();
-          setMode("login");
-          return;
-        }
-      }
-      window.alert("Invalid credentials");
-    } catch {
-      window.alert("Network or server error");
+    if (res?.success) {
+      resetState();
+      navigate("/mainwindow");
+      return;
+    } else {
+      window.alert(res.error);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (
+      !validateFields({
+        username: authState.registerUsername,
+        email: authState.registerEmail,
+        password: authState.registerPassword,
+        confirmPassword: authState.registerConfirmPassword,
+      })
+    ) {
+      return;
+    }
+
+    if (authState.registerPassword !== authState.registerConfirmPassword) {
+      window.alert("Passwords do not match");
+      return;
+    }
+
+    const res = await registerFn.execute({
+      username: authState.registerUsername,
+      email: authState.registerEmail,
+      password: authState.registerPassword,
+    });
+
+    if (res?.success) {
+      resetState();
+      setMode("login");
+      return;
+    } else {
+      console.log("response", res);
+      window.alert("Error from server: " + res?.error);
     }
   };
 
   const resetState = () =>
     setAuthState({
       loginEmail: "",
-      lginPassword: "",
+      loginPassword: "",
       registerUsername: "",
       registerEmail: "",
       registerPassword: "",
@@ -116,7 +134,7 @@ export const Authentification = () => {
       />
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={isLogin ? handleLogin : handleRegister}
         className="relative z-10 flex h-full flex-col md:flex-row"
       >
         <div className="flex w-full items-start justify-start p-4 md:w-1/2">
@@ -187,10 +205,10 @@ export const Authentification = () => {
               icon="bxs-lock-alt"
               type="password"
               placeholder="Password"
-              name="lginPassword"
-              value={authState.lginPassword}
+              name="loginPassword"
+              value={authState.loginPassword}
               onChange={handleInputChange}
-              className={`my-3 ${errors.lginPassword ? "invalid" : ""}`}
+              className={`my-3 ${errors.loginPassword ? "invalid" : ""}`}
             />
 
             <SubmitButton>Login</SubmitButton>

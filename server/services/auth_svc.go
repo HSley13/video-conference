@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"time"
+
 	"video-conference/db_aws"
 	"video-conference/models"
 	"video-conference/repositories"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 )
 
 type AuthService struct {
@@ -20,10 +23,11 @@ func NewAuthService(repo *repositories.UserRepository, secret string) *AuthServi
 	return &AuthService{userRepo: repo, jwtSecret: []byte(secret)}
 }
 
-func (s *AuthService) Register(ctx context.Context, username string, email string, password string) (*models.User, error) {
+func (s *AuthService) Register(ctx context.Context, username string, email string, password string) (access string, refresh string, userID string, err error) {
+
 	hash, err := db_aws.HashPassword(password)
 	if err != nil {
-		return nil, err
+		return "", "", "", err
 	}
 
 	user := &models.User{
@@ -32,39 +36,60 @@ func (s *AuthService) Register(ctx context.Context, username string, email strin
 		Email:        email,
 		HashPassword: hash,
 	}
-
-	if err := s.userRepo.CreateUser(ctx, user); err != nil {
-		return nil, err
+	if err = s.userRepo.CreateUser(ctx, user); err != nil {
+		return "", "", "", err
 	}
-	return user, nil
+
+	access, err = s.generateAccessToken(user.ID.String())
+	if err != nil {
+		return "", "", "", err
+	}
+	refresh, err = s.generateRefreshToken(user.ID.String())
+	if err != nil {
+		return "", "", "", err
+	}
+
+	_ = s.storeSession(ctx, user.ID, refresh)
+
+	return access, refresh, user.ID.String(), nil
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
+func (s *AuthService) Login(ctx context.Context, email string, password string) (access string, refresh string, userID string, err error) {
+
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil || db_aws.VerifyPassword(password, user.HashPassword) != nil {
-		return "", "", errors.New("invalid credentials")
+		return "", "", "", errors.New("invalid credentials")
 	}
 
-	access, err := s.generateAccessToken(user.ID.String())
+	access, err = s.generateAccessToken(user.ID.String())
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	refresh, err := s.generateRefreshToken(user.ID.String())
+	refresh, err = s.generateRefreshToken(user.ID.String())
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
-	session := &models.Session{
-		UserID:       user.ID,
-		RefreshToken: refresh,
-		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
-	}
-	if err := s.userRepo.CreateSession(ctx, session); err != nil {
-		return "", "", err
-	}
+	_ = s.storeSession(ctx, user.ID, refresh)
 
-	return access, refresh, nil
+	return access, refresh, user.ID.String(), nil
 }
+
+func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (newAccess string, err error) {
+
+	claims, err := s.ValidateToken(refreshToken)
+	if err != nil {
+		return "", errors.New("invalid refresh token")
+	}
+	uid := claims["sub"].(string)
+
+	sess, err := s.userRepo.GetSessionByUserID(ctx, uid)
+	if err != nil || sess.RefreshToken != refreshToken || time.Now().After(sess.ExpiresAt) {
+		return "", errors.New("expired session")
+	}
+	return s.generateAccessToken(uid)
+}
+
 func (s *AuthService) generateAccessToken(uid string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": uid,
@@ -91,16 +116,45 @@ func (s *AuthService) ValidateToken(tok string) (jwt.MapClaims, error) {
 	return claims, nil
 }
 
-func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (string, error) {
-	claims, err := s.ValidateToken(refreshToken)
-	if err != nil {
-		return "", errors.New("invalid refresh token")
+func (s *AuthService) storeSession(ctx context.Context, uid uuid.UUID, refresh string) error {
+	sess := &models.Session{
+		UserID:       uid,
+		RefreshToken: refresh,
+		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
 	}
-	userID := claims["sub"].(string)
+	return s.userRepo.CreateSession(ctx, sess)
+}
 
-	session, err := s.userRepo.GetSessionByUserID(ctx, userID)
-	if err != nil || session.RefreshToken != refreshToken || time.Now().After(session.ExpiresAt) {
-		return "", errors.New("invalid or expired session")
+func (s *AuthService) SetAuthCookies(c *fiber.Ctx, access string, refresh string, userID string) {
+	if access != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "access_token",
+			Value:    access,
+			Expires:  time.Now().Add(15 * time.Minute),
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Lax",
+		})
 	}
-	return s.generateAccessToken(userID)
+	if refresh != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "refresh_token",
+			Value:    refresh,
+			Expires:  time.Now().Add(7 * 24 * time.Hour),
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Strict",
+			Path:     "/video-conference/auth/refresh",
+		})
+	}
+	if userID != "" {
+		c.Cookie(&fiber.Cookie{
+			Name:     "videoConferenceUserId",
+			Value:    userID,
+			Expires:  time.Now().Add(7 * 24 * time.Hour),
+			HTTPOnly: false,
+			Secure:   true,
+			SameSite: "Lax",
+		})
+	}
 }
