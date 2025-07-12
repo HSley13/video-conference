@@ -32,11 +32,6 @@ export const Authentification = () => {
   const isLogin = mode === "login";
   const toggleMode = () => setMode(isLogin ? "register" : "login");
 
-  useEffect(() => {
-    const t = setTimeout(() => setMode("login"), 5000);
-    return () => clearTimeout(t);
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setAuthState((prev) => ({ ...prev, [name]: value }));

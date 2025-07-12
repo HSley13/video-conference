@@ -27,14 +27,12 @@ export const createRoom = async ({ title, description }: createRoomProps) => {
 
 type joinRoomProps = {
   id: string;
-  password?: string;
 };
-export const joinRoom = async ({ id, password }: joinRoomProps) => {
+export const joinRoom = async ({ id }: joinRoomProps) => {
   const response = await makeRequest({
     url: `/room/join/${id}`,
     options: {
-      method: "PUT",
-      data: { password },
+      method: "POST",
     },
   });
   return response;

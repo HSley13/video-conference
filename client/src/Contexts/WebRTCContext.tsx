@@ -12,10 +12,10 @@ import {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useUser } from "../Hooks/useUser";
 import { useAsync } from "../Hooks/useAsync";
 import { getUserInfo } from "../Services/user";
 import { User, UserInfo } from "../Types/types";
+import { useUser } from "../Hooks/useUser";
 
 type RemoteStreamMap = Record<string, MediaStream>;
 
@@ -35,32 +35,36 @@ const WebRTCContext = createContext<WebRTCContextValue | undefined>(undefined);
 export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
   const [search] = useSearchParams();
   const roomId = search.get("room") ?? "";
-  const fallbackUser = useUser();
-  const userIdParam = search.get("uid") ?? fallbackUser?.id ?? "";
+  const user = useUser();
+  const userIdParam = search.get("uid") ?? user?.id;
+  console.log("userIdParam:", userIdParam);
+  console.log("roomId:", roomId);
 
   const [userInfo, setUserInfo] = useState<UserInfo>({
-    id: userIdParam,
-    username: "",
+    id: userIdParam ?? "",
+    userName: "",
     email: "",
-    imageUrl: "",
+    imgUrl: "",
   });
-  //
-  // const { value: fetched } = useAsync(
-  //   () =>
-  //     userIdParam ? getUserInfo({ id: userIdParam }) : Promise.resolve(null),
-  //   [userIdParam],
-  // );
-  //
-  // useEffect(() => {
-  //   if (!fetched) return;
-  //   setUserInfo({
-  //     id: fetched.id,
-  //     username: fetched.username,
-  //     email: fetched.email,
-  //     imageUrl: fetched.imageUrl,
-  //   });
-  // }, [fetched]);
-  //
+
+  const fetchProfile = useCallback(
+    () =>
+      userIdParam ? getUserInfo({ id: userIdParam }) : Promise.resolve(null),
+    [userIdParam],
+  );
+
+  const { value: fetched } = useAsync(fetchProfile, [fetchProfile]);
+
+  useEffect(() => {
+    if (!fetched) return;
+    setUserInfo({
+      id: fetched.id,
+      userName: fetched.userName,
+      email: fetched.email,
+      imgUrl: fetched.imgUrl,
+    });
+  }, [fetched]);
+
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamMap>({});
   const [users, setUsers] = useState<User[]>([]);

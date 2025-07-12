@@ -50,7 +50,6 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 	peerCount := len(roomMap)
 	s.mutex.Unlock()
 
-	log.Printf("[ROOM %s] socket open → %s (peers=%d)", roomID, userID, peerCount)
 	defer s.cleanupConnection(ctx, roomID, userID)
 
 	if peerCount > s.maxConnections {
@@ -59,7 +58,6 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 	}
 
 	if err := s.roomRepo.AddParticipant(ctx, roomID, userID); err != nil {
-		log.Printf("AddParticipant: %v", err)
 		return
 	}
 	defer s.roomRepo.RemoveParticipant(ctx, roomID, userID)
@@ -72,14 +70,13 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 		"type", "user-joined",
 		"userID", user.ID,
 		"userName", user.UserName,
-		"userPhoto", user.ImgUrl,
+		"imgUrl", user.ImgUrl,
 		"sender", userID,
 	)
 	_ = s.roomRepo.PublishMessage(ctx, roomID, join)
 
 	sub, err := s.roomRepo.SubscribeToRoom(ctx, roomID)
 	if err != nil {
-		log.Printf("SubscribeToRoom: %v", err)
 		return
 	}
 	defer s.roomRepo.UnsubscribeFromRoom(ctx, sub)
@@ -101,7 +98,7 @@ func (s *WebSocketService) HandleConnection(ctx context.Context, conn *websocket
 		"type", "user-left",
 		"userID", user.ID,
 		"userName", user.UserName,
-		"userPhoto", user.ImgUrl,
+		"imgUrl", user.ImgUrl,
 		"sender", userID,
 	)
 	_ = s.roomRepo.PublishMessage(ctx, roomID, leave)
@@ -114,7 +111,6 @@ func (s *WebSocketService) readFromClient(ctx context.Context, conn *websocket.C
 			if websocket.IsUnexpectedCloseError(err,
 				websocket.CloseGoingAway,
 				websocket.CloseAbnormalClosure) {
-				log.Printf("read error %s: %v", userID, err)
 			}
 			return
 		}

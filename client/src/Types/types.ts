@@ -1,8 +1,8 @@
 export type UserInfo = {
   id: string;
-  username: string;
+  userName: string;
   email: string;
-  imageUrl: string;
+  imgUrl: string;
 };
 
 export type Message = {
@@ -11,14 +11,14 @@ export type Message = {
   time: string;
   user: {
     id: string;
-    name: string;
+    userName: string;
     imgUrl: string;
   };
 };
 
 export type User = {
   id: string;
-  name: string;
+  userName: string;
   imgUrl: string;
   isAudioOn: boolean;
   isPinned: boolean;

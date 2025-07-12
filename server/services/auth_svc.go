@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"video-conference/db_aws"
@@ -10,6 +11,7 @@ import (
 	"video-conference/repositories"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 )
@@ -24,7 +26,6 @@ func NewAuthService(repo *repositories.UserRepository, secret string) *AuthServi
 }
 
 func (s *AuthService) Register(ctx context.Context, username string, email string, password string) (access string, refresh string, userID string, err error) {
-
 	hash, err := db_aws.HashPassword(password)
 	if err != nil {
 		return "", "", "", err
@@ -55,7 +56,6 @@ func (s *AuthService) Register(ctx context.Context, username string, email strin
 }
 
 func (s *AuthService) Login(ctx context.Context, email string, password string) (access string, refresh string, userID string, err error) {
-
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil || db_aws.VerifyPassword(password, user.HashPassword) != nil {
 		return "", "", "", errors.New("invalid credentials")
@@ -76,7 +76,6 @@ func (s *AuthService) Login(ctx context.Context, email string, password string) 
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (newAccess string, err error) {
-
 	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
 		return "", errors.New("invalid refresh token")
@@ -123,6 +122,41 @@ func (s *AuthService) storeSession(ctx context.Context, uid uuid.UUID, refresh s
 		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
 	}
 	return s.userRepo.CreateSession(ctx, sess)
+}
+
+func extractToken(c *fiber.Ctx) string {
+	if t := c.Get("Authorization"); t != "" {
+		if strings.HasPrefix(strings.ToLower(t), "bearer ") {
+			return strings.TrimSpace(t[7:])
+		}
+		return t
+	}
+	if t := c.Cookies("access_token"); t != "" {
+		return t
+	}
+	return c.Query("access_token")
+}
+
+func (s *AuthService) AuthRequired(c *fiber.Ctx) error {
+	claims, err := s.ValidateToken(extractToken(c))
+	if err != nil {
+		return fiber.ErrUnauthorized
+	}
+	c.Locals("videoConferenceUserId", uuid.MustParse(claims["sub"].(string)))
+	return c.Next()
+}
+
+func (s *AuthService) AuthenticateWS(c *fiber.Ctx) error {
+	if !websocket.IsWebSocketUpgrade(c) {
+		return fiber.ErrUpgradeRequired
+	}
+	claims, err := s.ValidateToken(extractToken(c))
+	if err != nil {
+		return fiber.ErrUnauthorized
+	}
+	c.Locals("videoConferenceUserId", claims["sub"].(string))
+	c.Locals("ctx", c.Context())
+	return c.Next()
 }
 
 func (s *AuthService) SetAuthCookies(c *fiber.Ctx, access string, refresh string, userID string) {

@@ -16,12 +16,12 @@ export const login = async ({ email, password }: LoginProps) => {
 };
 
 type RegisterProps = {
-  username: string;
+  userName: string;
   email: string;
   password: string;
 };
 export const register = async ({
-  username,
+  userName,
   email,
   password,
 }: RegisterProps) => {
@@ -29,7 +29,7 @@ export const register = async ({
     url: "/auth/register",
     options: {
       method: "POST",
-      data: { username, email, password },
+      data: { userName, email, password },
     },
   });
   return response;

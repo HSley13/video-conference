@@ -5,7 +5,7 @@ import { Message, User } from "../Types/types";
 import { FormatTime } from "../Utils/utils";
 
 interface WsUser {
-  id: string;
+  userID: string;
   userName: string;
   imgUrl: string;
 }
@@ -17,7 +17,7 @@ interface UserJoinedMsg {
   type: "user-joined";
   userID: string;
   userName: string;
-  userPhoto: string;
+  imgUrl: string;
 }
 interface UserLeftMsg {
   type: "user-left";
@@ -43,7 +43,7 @@ interface ChatMsg {
   id: string;
   text: string;
   time: string;
-  user: Pick<User, "id" | "name" | "imgUrl">;
+  user: Pick<User, "id" | "userName" | "imgUrl">;
 }
 
 type Incoming =
@@ -79,7 +79,7 @@ type Outgoing =
 export const useVideoConference = () => {
   const {
     roomId,
-    userInfo: { id: currentUid, username: firstName, imageUrl },
+    userInfo: { id: userID, userName: userName, imgUrl },
     localStream,
     addRemoteStream,
     removeRemoteStream,
@@ -94,7 +94,7 @@ export const useVideoConference = () => {
   const knownUserIds = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!currentUid) return;
+    if (!userID) return;
 
     const url = `ws://localhost:3002/video-conference/ws/${roomId}`;
 
@@ -115,17 +115,17 @@ export const useVideoConference = () => {
       socketRef.current?.close();
       Object.values(peersRef.current).forEach((pc) => pc.close());
     };
-  }, [roomId, currentUid]);
+  }, [roomId, userID]);
 
   const handleSocketMessage = async (msg: Incoming) => {
     switch (msg.type) {
       case "users-list": {
-        const others = msg.users.filter((u) => u.id !== currentUid);
-        knownUserIds.current = new Set(others.map((u) => u.id));
+        const others = msg.users.filter((u) => u.userID !== userID);
+        knownUserIds.current = new Set(others.map((u) => u.userID));
         setUsers(
           others.map<User>((u) => ({
-            id: u.id,
-            name: u.userName,
+            id: u.userID,
+            userName: u.userName,
             imgUrl: u.imgUrl,
             isAudioOn: true,
             isVideoOn: true,
@@ -133,22 +133,19 @@ export const useVideoConference = () => {
             videoStream: null,
           })),
         );
-        others.forEach((u) => createPeer(u.id));
+        others.forEach((u) => createPeer(u.userID));
         break;
       }
 
       case "user-joined": {
-        if (
-          msg.userID !== currentUid &&
-          !knownUserIds.current.has(msg.userID)
-        ) {
+        if (msg.userID !== userID && !knownUserIds.current.has(msg.userID)) {
           knownUserIds.current.add(msg.userID);
           setUsers((prev) => [
             ...prev,
             {
               id: msg.userID,
-              name: msg.userName,
-              imgUrl: msg.userPhoto,
+              userName: msg.userName,
+              imgUrl: msg.imgUrl,
               isAudioOn: true,
               isVideoOn: true,
               isPinned: false,
@@ -168,14 +165,13 @@ export const useVideoConference = () => {
         break;
 
       case "offer":
-        if (msg.from !== currentUid) await handleOffer(msg.offer, msg.from);
+        if (msg.from !== userID) await handleOffer(msg.offer, msg.from);
         break;
       case "answer":
-        if (msg.from !== currentUid) await handleAnswer(msg.answer, msg.from);
+        if (msg.from !== userID) await handleAnswer(msg.answer, msg.from);
         break;
       case "ice-candidate":
-        if (msg.from !== currentUid)
-          await handleCandidate(msg.candidate, msg.from);
+        if (msg.from !== userID) await handleCandidate(msg.candidate, msg.from);
         break;
 
       case "chat-message":
@@ -201,7 +197,7 @@ export const useVideoConference = () => {
       id: uuid(),
       text,
       time: FormatTime(new Date()),
-      user: { id: currentUid, name: firstName, imgUrl: imageUrl },
+      user: { id: userID, userName: userName, imgUrl: imgUrl },
     };
     seenMsgIds.current.add(msg.id);
     setMessages((prev) => [...prev, msg]);
@@ -211,7 +207,7 @@ export const useVideoConference = () => {
   };
 
   const createPeer = async (remoteId: string) => {
-    if (remoteId === currentUid || peersRef.current[remoteId]) return;
+    if (remoteId === userID || peersRef.current[remoteId]) return;
 
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -226,7 +222,7 @@ export const useVideoConference = () => {
             type: "ice-candidate",
             candidate: e.candidate,
             to: remoteId,
-            from: currentUid,
+            from: userID,
           } satisfies Outgoing),
         );
       }
@@ -238,7 +234,7 @@ export const useVideoConference = () => {
         type: "offer",
         offer: pc.localDescription!,
         to: remoteId,
-        from: currentUid,
+        from: userID,
       } satisfies Outgoing),
     );
 
@@ -263,7 +259,7 @@ export const useVideoConference = () => {
           type: "ice-candidate",
           candidate: e.candidate,
           to: remoteId,
-          from: currentUid,
+          from: userID,
         } satisfies Outgoing),
       );
 
@@ -275,7 +271,7 @@ export const useVideoConference = () => {
         type: "answer",
         answer: pc.localDescription!,
         to: remoteId,
-        from: currentUid,
+        from: userID,
       } satisfies Outgoing),
     );
 
