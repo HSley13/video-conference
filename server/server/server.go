@@ -155,6 +155,10 @@ func (s *Server) handleCreateRoom(c *fiber.Ctx) error {
 	if err := s.roomRepo.CreateRoom(c.Context(), &room); err != nil {
 		return utils.RespondWithError(c, fiber.StatusInternalServerError, "create failed")
 	}
+	if err := s.roomRepo.AddParticipant(c.Context(), room.ID.String(), owner.String()); err != nil {
+		return utils.RespondWithError(c, fiber.StatusInternalServerError, "join failed")
+	}
+
 	return utils.SuccessResponse(c, fiber.Map{"id": room.ID})
 }
 
@@ -170,17 +174,7 @@ func (s *Server) handleJoinRoom(c *fiber.Ctx) error {
 		return utils.RespondWithError(c, fiber.StatusInternalServerError, "join failed")
 	}
 
-	ids, _ := s.roomRepo.GetParticipants(c.Context(), roomID)
-	list := make([]fiber.Map, 0, len(ids))
-	for _, id := range ids {
-		if u, _ := s.userRepo.GetUserByID(c.Context(), id); u != nil {
-			list = append(list, fiber.Map{"id": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
-		}
-	}
-	return utils.SuccessResponse(c, fiber.Map{
-		"room_id":      roomID,
-		"participants": list,
-	})
+	return utils.SuccessResponse(c, fiber.Map{"id": roomID})
 }
 
 func (s *Server) authRequired(c *fiber.Ctx) error {
@@ -204,6 +198,7 @@ func extractToken(c *fiber.Ctx) string {
 	}
 	return c.Query("access_token")
 }
+
 func (s *Server) authenticateWS(c *fiber.Ctx) error {
 	if !websocket.IsWebSocketUpgrade(c) {
 		return fiber.ErrUpgradeRequired

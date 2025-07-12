@@ -22,13 +22,15 @@ export const Home = () => {
       description: "This is the Avengers Group",
     });
 
-    console.log("createRoomResponse: ", createRoomResponse.message.id);
+    if (!createRoomResponse.success) {
+      toast.error(createRoomResponse.error);
+      return;
+    }
     navigate(`/videoWindow?room=${createRoomResponse.message.id}`);
   };
 
   const handleJoinRoom = () => {
     if (!roomLink.trim()) return;
-    console.log("roomLink: ", roomLink.trim());
     navigate(`/videoWindow?room=${roomLink}`);
   };
 

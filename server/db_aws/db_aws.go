@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"video-conference/models"
-	"video-conference/seed"
+	// "video-conference/seed"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -186,7 +186,7 @@ func InitDb(dsn string) *gorm.DB {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	seed.Seed(db)
+	// seed.Seed(db)
 
 	return db
 }
