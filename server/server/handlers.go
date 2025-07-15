@@ -14,7 +14,7 @@ import (
 
 func (s *Server) handleRegister(c *fiber.Ctx) error {
 	var body struct {
-		Username string `json:"username"`
+		Username string `json:"userName"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
@@ -113,7 +113,7 @@ func (s *Server) handleJoinRoom(c *fiber.Ctx) error {
 func (s *Server) handleUserInfo(c *fiber.Ctx) error {
 	uid := c.Params("id")
 	if u, _ := s.userRepo.GetUserByID(c.Context(), uid); u != nil {
-		return utils.SuccessResponse(c, fiber.Map{"id": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
+		return utils.SuccessResponse(c, fiber.Map{"userID": u.ID, "userName": u.UserName, "imgUrl": u.ImgUrl})
 	}
 	return utils.RespondWithError(c, fiber.StatusNotFound, "user not found")
 }

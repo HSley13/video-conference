@@ -24,12 +24,12 @@ export const ParticipantCard = ({
             <div className="d-flex align-items-center gap-2">
               <img
                 src={user.imgUrl}
-                alt={user.name}
+                alt={user.userName}
                 className="rounded-circle"
                 width={40}
                 height={40}
               />
-              <span className="font-medium text-truncate">{user.name}</span>
+              <span className="font-medium text-truncate">{user.userName}</span>
             </div>
           </Col>
 

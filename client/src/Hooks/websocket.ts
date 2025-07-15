@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { v4 as uuid } from "uuid";
 import { useWebRTC } from "../Contexts/WebRTCContext";
 import { Message, User } from "../Types/types";
@@ -81,20 +81,34 @@ export const useVideoConference = () => {
     roomId,
     userInfo: { id: userID, userName: userName, imgUrl },
     localStream,
+    setLocalStream,
     addRemoteStream,
     removeRemoteStream,
     setUsers,
+    peersRef,
   } = useWebRTC();
 
   const socketRef = useRef<WebSocket | null>(null);
-  const peersRef = useRef<Record<string, RTCPeerConnection>>({});
-
   const [messages, setMessages] = useState<Message[]>([]);
   const seenMsgIds = useRef(new Set<string>());
   const knownUserIds = useRef(new Set<string>());
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   useEffect(() => {
-    if (!userID) return;
+    if (!userID || !localStream) return;
+
+    setUsers((prev) => [
+      {
+        id: "local",
+        userName,
+        imgUrl,
+        isAudioOn: true,
+        isVideoOn: true,
+        isPinned: false,
+        videoStream: localStream,
+      },
+      ...prev,
+    ]);
 
     const url = `ws://localhost:3002/video-conference/ws/${roomId}`;
 
@@ -115,7 +129,7 @@ export const useVideoConference = () => {
       socketRef.current?.close();
       Object.values(peersRef.current).forEach((pc) => pc.close());
     };
-  }, [roomId, userID]);
+  }, [roomId, userID, localStream]);
 
   const handleSocketMessage = async (msg: Incoming) => {
     switch (msg.type) {
@@ -133,7 +147,9 @@ export const useVideoConference = () => {
             videoStream: null,
           })),
         );
-        others.forEach((u) => createPeer(u.userID));
+        if (localStream) {
+          others.forEach((u) => createPeer(u.userID));
+        }
         break;
       }
 
@@ -299,5 +315,49 @@ export const useVideoConference = () => {
     delete peersRef.current[remoteId];
   };
 
-  return { messages, sendChatMessage };
+  const renegotiateAll = useCallback(() => {
+    Object.entries(peersRef.current).forEach(([id, pc]) => {
+      if (pc.connectionState === "connected") {
+        pc.createOffer()
+          .then((o) => pc.setLocalDescription(o))
+          .then(() =>
+            socketRef.current?.send(
+              JSON.stringify({
+                type: "offer",
+                offer: pc.localDescription!,
+                to: id,
+                from: userID,
+              } as Outgoing),
+            ),
+          );
+      }
+    });
+  }, [userID]);
+
+  const toggleScreenSharing = useCallback(async () => {
+    const camTrack = localStream?.getVideoTracks()[0];
+    camTrack?.stop();
+
+    const newStream = !isScreenSharing
+      ? await navigator.mediaDevices.getDisplayMedia({ video: true })
+      : await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+    const newTrack = newStream.getVideoTracks()[0];
+    if (!newTrack) return;
+
+    Object.values(peersRef.current).forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) sender.replaceTrack(newTrack);
+    });
+
+    setLocalStream((prev) => {
+      prev?.getTracks().forEach((t) => t.stop());
+      return newStream;
+    });
+
+    setIsScreenSharing(!isScreenSharing);
+    renegotiateAll();
+  }, [isScreenSharing, localStream, renegotiateAll]);
+
+  return { messages, sendChatMessage, toggleScreenSharing, isScreenSharing };
 };

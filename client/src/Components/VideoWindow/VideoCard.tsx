@@ -3,17 +3,17 @@ import { Card, Button, Col } from "react-bootstrap";
 import { Mic, MicOff, Pin, PinOff } from "lucide-react";
 
 type VideoCardProps = {
-  id: number;
-  name: string;
+  id: string;
+  userName: string;
   imgUrl: string;
   isAudioOn: boolean;
   isPinned: boolean;
   videoStream: MediaStream | null;
-  onPin: (id: number) => void;
+  onPin: (id: string) => void;
 };
 export const VideoCard = ({
   id,
-  name,
+  userName,
   isAudioOn,
   isPinned,
   imgUrl,
@@ -55,7 +55,7 @@ export const VideoCard = ({
           <Card.Img
             variant="top"
             src={imgUrl}
-            alt={name}
+            alt={userName}
             className="h-100 w-100 object-cover"
           />
         )}
@@ -65,7 +65,7 @@ export const VideoCard = ({
 
       <Col className="position-absolute bottom-0 start-0 w-100 m-0 px-2 pb-2">
         <span className="badge bg-dark bg-opacity-75 text-white rounded-pill px-3">
-          {name}
+          {userName}
         </span>
       </Col>
 

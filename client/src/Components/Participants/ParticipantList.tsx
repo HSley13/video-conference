@@ -14,7 +14,7 @@ export const ParticipantList = () => {
             user={participant}
             onPin={(id) => {
               const updatedParticipants = Participants.map((p) => {
-                if (p.id === parseInt(id)) {
+                if (p.id === id) {
                   return { ...p, isPinned: !p.isPinned };
                 }
                 return p;
@@ -23,7 +23,7 @@ export const ParticipantList = () => {
             }}
             onVideoToggle={(id) => {
               const updatedParticipants = Participants.map((p) => {
-                if (p.id === parseInt(id)) {
+                if (p.id === id) {
                   return { ...p, isVideoOn: !p.isVideoOn };
                 }
                 return p;
@@ -32,7 +32,7 @@ export const ParticipantList = () => {
             }}
             onAudioToggle={(id) => {
               const updatedParticipants = Participants.map((p) => {
-                if (p.id === parseInt(id)) {
+                if (p.id === id) {
                   return { ...p, isAudioOn: !p.isAudioOn };
                 }
                 return p;

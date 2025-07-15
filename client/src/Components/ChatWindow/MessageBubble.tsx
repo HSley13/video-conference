@@ -18,8 +18,8 @@ export const MessageBubble = ({
           {!isCurrentUser && (
             <Col xs="auto" className="align-self-center">
               <img
-                src={message.user.photo}
-                alt={message.user.name}
+                src={message.user.imgUrl}
+                alt={message.user.userName}
                 className="rounded-circle"
                 style={{ width: "40px", height: "40px" }}
               />
@@ -31,7 +31,7 @@ export const MessageBubble = ({
               className={`d-flex justify-content-between ${isCurrentUser ? "flex-row-reverse" : ""}`}
             >
               <small className="fw-bold text-truncate flex-grow-1">
-                {message.user.name}
+                {message.user.userName}
               </small>
               <small className="text-muted ms-2">{message.time}</small>
             </div>
@@ -51,8 +51,8 @@ export const MessageBubble = ({
           {isCurrentUser && (
             <Col xs="auto" className="align-self-center">
               <img
-                src={message.user.photo}
-                alt={message.user.name}
+                src={message.user.imgUrl}
+                alt={message.user.userName}
                 className="rounded-circle"
                 style={{ width: "40px", height: "40px" }}
               />

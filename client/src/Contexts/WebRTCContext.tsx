@@ -11,7 +11,6 @@ import {
   useMemo,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-
 import { useAsync } from "../Hooks/useAsync";
 import { getUserInfo } from "../Services/user";
 import { User, UserInfo } from "../Types/types";
@@ -21,6 +20,7 @@ type RemoteStreamMap = Record<string, MediaStream>;
 
 export interface WebRTCContextValue {
   localStream: MediaStream | null;
+  setLocalStream: Dispatch<SetStateAction<MediaStream | null>>;
   remoteStreams: RemoteStreamMap;
   users: User[];
   setUsers: Dispatch<SetStateAction<User[]>>;
@@ -28,6 +28,7 @@ export interface WebRTCContextValue {
   removeRemoteStream: (uid: string) => void;
   roomId: string;
   userInfo: UserInfo;
+  peersRef: React.MutableRefObject<Record<string, RTCPeerConnection>>;
 }
 
 const WebRTCContext = createContext<WebRTCContextValue | undefined>(undefined);
@@ -36,21 +37,18 @@ export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
   const [search] = useSearchParams();
   const roomId = search.get("room") ?? "";
   const user = useUser();
-  const userIdParam = search.get("uid") ?? user?.id;
-  console.log("userIdParam:", userIdParam);
-  console.log("roomId:", roomId);
+  const userId = search.get("uid") ?? user?.id;
 
   const [userInfo, setUserInfo] = useState<UserInfo>({
-    id: userIdParam ?? "",
+    id: userId ?? "",
     userName: "",
     email: "",
     imgUrl: "",
   });
 
   const fetchProfile = useCallback(
-    () =>
-      userIdParam ? getUserInfo({ id: userIdParam }) : Promise.resolve(null),
-    [userIdParam],
+    () => (userId ? getUserInfo({ id: userId }) : Promise.resolve(null)),
+    [userId],
   );
 
   const { value: fetched } = useAsync(fetchProfile, [fetchProfile]);
@@ -69,6 +67,7 @@ export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamMap>({});
   const [users, setUsers] = useState<User[]>([]);
   const mediaRequestedRef = useRef(false);
+  const peersRef = useRef<Record<string, RTCPeerConnection>>({});
 
   const addRemoteStream = useCallback((uid: string, stream: MediaStream) => {
     setRemoteStreams((prev) => ({ ...prev, [uid]: stream }));
@@ -121,6 +120,7 @@ export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
   const ctxValue = useMemo<WebRTCContextValue>(
     () => ({
       localStream,
+      setLocalStream,
       remoteStreams,
       users,
       addRemoteStream,
@@ -128,6 +128,7 @@ export const WebRTCProvider = ({ children }: { children: ReactNode }) => {
       setUsers,
       roomId,
       userInfo,
+      peersRef,
     }),
     [
       localStream,
