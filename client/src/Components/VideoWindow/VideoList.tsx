@@ -2,15 +2,12 @@ import { useState, Fragment } from "react";
 import { ScreenShare, MonitorX } from "lucide-react";
 import { VideoCard } from "./VideoCard";
 import { useWebRTC } from "../../Contexts/WebRTCContext";
+import { useVideoConference } from "../../Hooks/websocket";
 
 export const VideoList = () => {
-  const {
-    users,
-    localStream,
-    remoteStreams,
-    toggleScreenSharing,
-    isScreenSharing,
-  } = useWebRTC();
+  const { users, remoteStreams } = useWebRTC();
+
+  const { toggleScreenSharing, isScreenSharing } = useVideoConference();
 
   const [pinnedId, setPinnedId] = useState<string | null>(null);
 
@@ -22,8 +19,7 @@ export const VideoList = () => {
     ? users.filter((u) => u.id !== mainUser.id)
     : users;
 
-  const streamFor = (uid: string) =>
-    uid === "local" ? localStream : (remoteStreams[uid] ?? null);
+  const streamFor = (uid: string) => remoteStreams[uid] ?? null;
 
   return (
     <div className="flex flex-col h-screen">

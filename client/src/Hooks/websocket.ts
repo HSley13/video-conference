@@ -79,7 +79,7 @@ type Outgoing =
 export const useVideoConference = () => {
   const {
     roomId,
-    userInfo: { id: userID, userName: userName, imgUrl },
+    userInfo: { id: userID, userName, imgUrl },
     localStream,
     setLocalStream,
     addRemoteStream,
@@ -89,55 +89,49 @@ export const useVideoConference = () => {
   } = useWebRTC();
 
   const socketRef = useRef<WebSocket | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const seenMsgIds = useRef(new Set<string>());
-  const knownUserIds = useRef(new Set<string>());
+
+  const knownUserIds = useRef<Set<string>>(new Set());
+
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   useEffect(() => {
-    if (!userID || !localStream) return;
-
-    setUsers((prev) => [
-      {
-        id: "local",
-        userName,
-        imgUrl,
-        isAudioOn: true,
-        isVideoOn: true,
-        isPinned: false,
-        videoStream: localStream,
-      },
-      ...prev,
-    ]);
+    if (!userID) return;
 
     const url = `ws://localhost:3002/video-conference/ws/${roomId}`;
 
     const openSocket = () => {
-      socketRef.current = new WebSocket(url);
+      const ws = new WebSocket(url);
+      socketRef.current = ws;
 
-      socketRef.current.onmessage = (e) =>
-        handleSocketMessage(JSON.parse(e.data) as Incoming);
+      ws.onmessage = (e) => handleSocketMessage(JSON.parse(e.data) as Incoming);
 
-      socketRef.current.onclose = () => {
+      ws.onclose = () => {
         console.warn("[WS] closed – retry in 3s");
         setTimeout(openSocket, 3_000);
       };
     };
 
     openSocket();
+
     return () => {
       socketRef.current?.close();
       Object.values(peersRef.current).forEach((pc) => pc.close());
+      peersRef.current = {};
+      knownUserIds.current.clear();
     };
-  }, [roomId, userID, localStream]);
+  }, [roomId, userID]);
 
   const handleSocketMessage = async (msg: Incoming) => {
     switch (msg.type) {
       case "users-list": {
-        const others = msg.users.filter((u) => u.userID !== userID);
-        knownUserIds.current = new Set(others.map((u) => u.userID));
+        const remotes = msg.users.filter((u) => u.userID !== userID);
+        knownUserIds.current = new Set(remotes.map((u) => u.userID));
+
         setUsers(
-          others.map<User>((u) => ({
+          remotes.map<User>((u) => ({
             id: u.userID,
             userName: u.userName,
             imgUrl: u.imgUrl,
@@ -147,45 +141,50 @@ export const useVideoConference = () => {
             videoStream: null,
           })),
         );
+
         if (localStream) {
-          others.forEach((u) => createPeer(u.userID));
+          remotes.forEach((u) => createPeer(u.userID));
         }
         break;
       }
 
       case "user-joined": {
-        if (msg.userID !== userID && !knownUserIds.current.has(msg.userID)) {
-          knownUserIds.current.add(msg.userID);
-          setUsers((prev) => [
-            ...prev,
-            {
-              id: msg.userID,
-              userName: msg.userName,
-              imgUrl: msg.imgUrl,
-              isAudioOn: true,
-              isVideoOn: true,
-              isPinned: false,
-              videoStream: null,
-            },
-          ]);
-          createPeer(msg.userID);
+        if (msg.userID === userID || knownUserIds.current.has(msg.userID)) {
+          break;
         }
+        knownUserIds.current.add(msg.userID);
+
+        setUsers((prev) => [
+          ...prev,
+          {
+            id: msg.userID,
+            userName: msg.userName,
+            imgUrl: msg.imgUrl,
+            isAudioOn: true,
+            isVideoOn: true,
+            isPinned: false,
+            videoStream: null,
+          },
+        ]);
         break;
       }
 
-      case "user-left":
+      case "user-left": {
         knownUserIds.current.delete(msg.userID);
         setUsers((prev) => prev.filter((u) => u.id !== msg.userID));
         removeRemoteStream(msg.userID);
         closePeer(msg.userID);
         break;
+      }
 
       case "offer":
         if (msg.from !== userID) await handleOffer(msg.offer, msg.from);
         break;
+
       case "answer":
         if (msg.from !== userID) await handleAnswer(msg.answer, msg.from);
         break;
+
       case "ice-candidate":
         if (msg.from !== userID) await handleCandidate(msg.candidate, msg.from);
         break;
@@ -213,7 +212,7 @@ export const useVideoConference = () => {
       id: uuid(),
       text,
       time: FormatTime(new Date()),
-      user: { id: userID, userName: userName, imgUrl: imgUrl },
+      user: { id: userID, userName, imgUrl },
     };
     seenMsgIds.current.add(msg.id);
     setMessages((prev) => [...prev, msg]);
@@ -228,9 +227,11 @@ export const useVideoConference = () => {
     const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
+
     localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
     pc.ontrack = (e) => addRemoteStream(remoteId, e.streams[0]);
+
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current) {
         socketRef.current.send(
@@ -261,23 +262,29 @@ export const useVideoConference = () => {
     offer: RTCSessionDescriptionInit,
     remoteId: string,
   ) => {
-    if (peersRef.current[remoteId]) return;
+    let pc = peersRef.current[remoteId];
+    if (!pc) {
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+      localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
+      pc.ontrack = (e) => addRemoteStream(remoteId, e.streams[0]);
+      pc.onicecandidate = (e) =>
+        e.candidate &&
+        socketRef.current?.send(
+          JSON.stringify({
+            type: "ice-candidate",
+            candidate: e.candidate,
+            to: remoteId,
+            from: userID,
+          } satisfies Outgoing),
+        );
+      peersRef.current[remoteId] = pc;
+    }
 
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
-    localStream?.getTracks().forEach((t) => pc.addTrack(t, localStream));
-    pc.ontrack = (e) => addRemoteStream(remoteId, e.streams[0]);
-    pc.onicecandidate = (e) =>
-      e.candidate &&
-      socketRef.current?.send(
-        JSON.stringify({
-          type: "ice-candidate",
-          candidate: e.candidate,
-          to: remoteId,
-          from: userID,
-        } satisfies Outgoing),
-      );
+    if (pc.signalingState === "have-local-offer") {
+      await pc.setLocalDescription({ type: "rollback" } as any);
+    }
 
     await pc.setRemoteDescription(offer);
     await pc.setLocalDescription(await pc.createAnswer());
@@ -290,8 +297,6 @@ export const useVideoConference = () => {
         from: userID,
       } satisfies Outgoing),
     );
-
-    peersRef.current[remoteId] = pc;
   };
 
   const handleAnswer = async (
@@ -327,7 +332,7 @@ export const useVideoConference = () => {
                 offer: pc.localDescription!,
                 to: id,
                 from: userID,
-              } as Outgoing),
+              } satisfies Outgoing),
             ),
           );
       }
@@ -335,9 +340,6 @@ export const useVideoConference = () => {
   }, [userID]);
 
   const toggleScreenSharing = useCallback(async () => {
-    const camTrack = localStream?.getVideoTracks()[0];
-    camTrack?.stop();
-
     const newStream = !isScreenSharing
       ? await navigator.mediaDevices.getDisplayMedia({ video: true })
       : await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -355,9 +357,9 @@ export const useVideoConference = () => {
       return newStream;
     });
 
-    setIsScreenSharing(!isScreenSharing);
+    setIsScreenSharing((v) => !v);
     renegotiateAll();
-  }, [isScreenSharing, localStream, renegotiateAll]);
+  }, [isScreenSharing, setLocalStream, renegotiateAll]);
 
   return { messages, sendChatMessage, toggleScreenSharing, isScreenSharing };
 };

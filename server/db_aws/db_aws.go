@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"video-conference/models"
-	// "video-conference/seed"
+	"video-conference/seed"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -86,6 +86,7 @@ func NewS3Client() (*s3.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %v", err)
 	}
+
 	return s3.NewFromConfig(cfg), nil
 }
 
@@ -186,7 +187,7 @@ func InitDb(dsn string) *gorm.DB {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	// seed.Seed(db)
+	seed.Seed(db)
 
 	return db
 }
