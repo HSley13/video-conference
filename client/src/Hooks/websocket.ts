@@ -152,20 +152,25 @@ export const useVideoConference = () => {
         if (msg.userID === userID || knownUserIds.current.has(msg.userID)) {
           break;
         }
+
         knownUserIds.current.add(msg.userID);
 
-        setUsers((prev) => [
-          ...prev,
-          {
-            id: msg.userID,
-            userName: msg.userName,
-            imgUrl: msg.imgUrl,
-            isAudioOn: true,
-            isVideoOn: true,
-            isPinned: false,
-            videoStream: null,
-          },
-        ]);
+        setUsers((prev) => {
+          if (prev.some((u) => u.id === msg.userID)) return prev;
+          return [
+            ...prev,
+            {
+              id: msg.userID,
+              userName: msg.userName,
+              imgUrl: msg.imgUrl,
+              isAudioOn: true,
+              isVideoOn: true,
+              isPinned: false,
+              videoStream: null,
+            },
+          ];
+        });
+
         break;
       }
 
