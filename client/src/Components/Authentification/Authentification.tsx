@@ -61,7 +61,7 @@ export const Authentification = () => {
       password: authState.loginPassword,
     });
 
-    if (res?.success) {
+    if (res?.success === true) {
       resetState();
       navigate("/mainwindow");
       return;
@@ -85,23 +85,24 @@ export const Authentification = () => {
     }
 
     if (authState.registerPassword !== authState.registerConfirmPassword) {
-      window.alert("Passwords do not match");
+      setErrors((prev) => ({ ...prev, registerConfirmPassword: true }));
+      alert("Passwords do not match");
+
       return;
     }
 
     const res = await registerFn.execute({
-      username: authState.registerUsername,
+      userName: authState.registerUsername,
       email: authState.registerEmail,
       password: authState.registerPassword,
     });
 
-    if (res?.success) {
+    if (res?.success === true) {
       resetState();
       setMode("login");
       return;
     } else {
-      console.log("response", res);
-      window.alert("Error from server: " + res?.error);
+      alert("Error from server: " + res?.error);
     }
   };
 
@@ -248,11 +249,12 @@ export const Authentification = () => {
   );
 };
 
-const Card: React.FC<{
+type CardProps = {
   visible: boolean;
   heading: string;
   children: React.ReactNode;
-}> = ({ visible, heading, children }) => (
+};
+const Card = ({ visible, heading, children }: CardProps) => (
   <div
     className={`w-full max-w-md transform rounded-3xl bg-white p-6 shadow-lg
                 transition-all duration-700 ease-in-out

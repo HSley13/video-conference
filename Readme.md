@@ -1,5 +1,7 @@
 # Real-Time Video Conference Platform
 
+![App Preview](./previews/5.png)
+![App Preview](./previews/6.png)
 ![App Preview](./previews/1.png)
 ![App Preview](./previews/2.png)
 ![App Preview](./previews/3.png)
